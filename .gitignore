@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dev-dist/
+dist-preview/
+
+# Environment
+.env
+.env.*
+!.env.example
+*.local
+
+# Vercel
+.vercel/
+
+# Claude Code
+.claude/
+
+# Supabase temp
+supabase/.temp/
+
+# Test artifacts
+playwright-report/
+test-results/
+docs/qa/
+
+# Misc
+.DS_Store
+*.log
+*.tsbuildinfo
+coverage/

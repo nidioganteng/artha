@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="id" data-palette="b" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F1F3EF" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/pwa-192.png" />
+    <title>Artha</title>
+    <script>
+      (function () {
+        var p = localStorage.getItem('artha:palette') || 'b'
+        var m = localStorage.getItem('artha:mode') || 'system'
+        var t = m === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : m
+        var el = document.documentElement
+        el.setAttribute('data-palette', p)
+        el.setAttribute('data-theme', t)
+        var bg = { a: { light: '#F1F3EF', dark: '#0B1910' }, b: { light: '#F4F1EB', dark: '#18140F' } }
+        var meta = document.querySelector('meta[name="theme-color"]')
+        if (meta) meta.setAttribute('content', (bg[p] || bg.b)[t] || '#F4F1EB')
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

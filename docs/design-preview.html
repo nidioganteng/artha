@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Artha — Pratinjau Desain</title>
+<!--
+  File ini adalah pratinjau desain mandiri (tidak masuk bundle aplikasi).
+  Font dipasang via Google Fonts CDN khusus untuk file ini.
+  Implementasi produksi memakai @fontsource-variable/plus-jakarta-sans dan @fontsource/dm-mono (self-hosted, offline-ready).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+/* ─────────────────────────────────────────────────────────────
+   TOKEN WARNA — 4 TEMA
+   Kelas diterapkan pada <body>. CSS var diakses oleh semua elemen.
+───────────────────────────────────────────────────────────────*/
+
+/* Arah A · Lime & Hutan · Terang */
+.a-light {
+  --bg:           #F1F3EF;
+  --surface:      #FFFFFF;
+  --surface-2:    #F6F8F4;
+  --text-1:       #0E1E15;
+  --text-2:       #3D5948;
+  --text-3:       #4D7362;
+  --border:       #DDE8DE;
+  --border-input: #6B8F7B;
+  --accent:       #84CC16;
+  --accent-fg:    #1A3A28;
+  --primary:      #1A3A28;
+  --primary-fg:   #FFFFFF;
+  --income:       #15803D;
+  --income-fg:    #FFFFFF;
+  --expense:      #DC2626;
+  --expense-fg:   #FFFFFF;
+  --invest:       #2563EB;
+  --warn:         #B45309;
+  --warn-fg:      #FFFFFF;
+  --shadow-sm:    0 1px 3px rgba(14,30,21,.06), 0 1px 2px rgba(14,30,21,.04);
+  --shadow-md:    0 4px 16px rgba(14,30,21,.08), 0 2px 4px rgba(14,30,21,.04);
+  --shadow-lg:    0 12px 40px rgba(14,30,21,.10), 0 4px 8px rgba(14,30,21,.05);
+  --glow:         none;
+  --glass-bg:     rgba(255,255,255,0.70);
+  --glass-bd:     rgba(14,30,21,0.10);
+  color-scheme: light;
+}
+
+/* Arah A · Lime & Hutan · Gelap */
+.a-dark {
+  --bg:           #0B1910;
+  --surface:      #132119;
+  --surface-2:    #1B3024;
+  --text-1:       #EBF4EC;
+  --text-2:       #8CB89A;
+  --text-3:       #7AAD90;
+  --border:       #1E3828;
+  --border-input: #5A9470;
+  --accent:       #A3E635;
+  --accent-fg:    #0B1910;
+  --primary:      #A3E635;
+  --primary-fg:   #0B1910;
+  --income:       #4ADE80;
+  --income-fg:    #052E16;
+  --expense:      #F87171;
+  --expense-fg:   #450A0A;
+  --invest:       #60A5FA;
+  --warn:         #FBBF24;
+  --warn-fg:      #451A03;
+  --shadow-sm:    0 1px 3px rgba(0,0,0,.35);
+  --shadow-md:    0 4px 16px rgba(0,0,0,.45);
+  --shadow-lg:    0 12px 40px rgba(0,0,0,.55);
+  --glow:         0 0 36px rgba(163,230,53,0.22);
+  --glass-bg:     rgba(163,230,53,0.07);
+  --glass-bd:     rgba(163,230,53,0.18);
+  color-scheme: dark;
+}
+
+/* Arah B · Sage & Greige · Terang */
+.b-light {
+  --bg:           #F4F1EB;
+  --surface:      #FFFFFF;
+  --surface-2:    #F9F7F2;
+  --text-1:       #1C1A14;
+  --text-2:       #54503F;
+  --text-3:       #756C62;
+  --border:       #E3DDD3;
+  --border-input: #6D6057;
+  --accent:       #6B8F74;
+  --accent-fg:    #1C1A14;
+  --primary:      #2D5240;
+  --primary-fg:   #FFFFFF;
+  --income:       #2E7D5A;
+  --income-fg:    #FFFFFF;
+  --expense:      #C0392B;
+  --expense-fg:   #FFFFFF;
+  --invest:       #2563EB;
+  --warn:         #92400E;
+  --warn-fg:      #FFFFFF;
+  --shadow-sm:    0 1px 3px rgba(28,26,20,.07), 0 1px 2px rgba(28,26,20,.04);
+  --shadow-md:    0 4px 16px rgba(28,26,20,.09), 0 2px 4px rgba(28,26,20,.04);
+  --shadow-lg:    0 12px 40px rgba(28,26,20,.12), 0 4px 8px rgba(28,26,20,.06);
+  --glow:         none;
+  --glass-bg:     rgba(255,255,255,0.75);
+  --glass-bd:     rgba(28,26,20,0.10);
+  color-scheme: light;
+}
+
+/* Arah B · Sage & Greige · Gelap (glow amber hangat, referensi 4) */
+.b-dark {
+  --bg:           #18140F;
+  --surface:      #231D17;
+  --surface-2:    #2D2519;
+  --text-1:       #F5F0E8;
+  --text-2:       #C4B8A8;
+  --text-3:       #9E9287;
+  --border:       #3A3026;
+  --border-input: #8F806F;
+  --accent:       #9BB8A5;
+  --accent-fg:    #18140F;
+  --primary:      #9BB8A5;
+  --primary-fg:   #18140F;
+  --income:       #52D38A;
+  --income-fg:    #052E16;
+  --expense:      #F47C7C;
+  --expense-fg:   #450A0A;
+  --invest:       #7EB8E8;
+  --warn:         #F59E0B;
+  --warn-fg:      #451A03;
+  --shadow-sm:    0 1px 3px rgba(0,0,0,.35);
+  --shadow-md:    0 4px 16px rgba(0,0,0,.48);
+  --shadow-lg:    0 12px 40px rgba(0,0,0,.58);
+  --glow:         0 0 36px rgba(245,158,11,0.16);
+  --glass-bg:     rgba(255,248,235,0.06);
+  --glass-bd:     rgba(245,158,11,0.16);
+  color-scheme: dark;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RESET & BASE
+───────────────────────────────────────────────────────────────*/
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text-1);
+  transition: background .3s ease, color .3s ease;
+  min-height: 100vh;
+  padding-bottom: 80px;
+}
+
+.num {
+  font-family: 'DM Mono', 'Courier New', monospace;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   HEADER KONTROL
+───────────────────────────────────────────────────────────────*/
+.ctrl-bar {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: background .3s, border-color .3s;
+}
+.ctrl-brand { font-weight: 700; font-size: 18px; letter-spacing: -.02em; color: var(--text-1); }
+.ctrl-badge {
+  display: inline-block; margin-left: 8px;
+  background: var(--warn); color: var(--warn-fg);
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 9999px; vertical-align: middle;
+}
+.ctrl-group { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.pill-row {
+  display: flex; background: var(--bg); border-radius: 9999px; padding: 3px;
+  border: 1px solid var(--border); gap: 2px;
+  transition: background .3s, border-color .3s;
+}
+.pill-btn {
+  padding: 6px 16px; border: none; border-radius: 9999px;
+  font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+  background: transparent; color: var(--text-2);
+  transition: background .2s, color .2s, box-shadow .2s;
+  line-height: 1.3;
+}
+.pill-btn.on {
+  background: var(--primary); color: var(--primary-fg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   LAYOUT UTAMA
+───────────────────────────────────────────────────────────────*/
+.main {
+  max-width: 1160px; margin: 0 auto;
+  padding: 48px 24px;
+  display: flex; flex-direction: column; gap: 72px;
+}
+
+.sec-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-3);
+  margin-bottom: 24px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  transition: color .3s, border-color .3s;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   1 · SWATCH WARNA
+───────────────────────────────────────────────────────────────*/
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 12px;
+}
+.swatch {
+  border-radius: 14px; overflow: hidden;
+  box-shadow: var(--shadow-sm); border: 1px solid var(--border);
+  transition: box-shadow .2s;
+}
+.swatch:hover { box-shadow: var(--shadow-md); }
+.swatch-color { height: 68px; }
+.swatch-info {
+  background: var(--surface); padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  transition: background .3s;
+}
+.swatch-name { font-size: 12px; font-weight: 600; color: var(--text-1); }
+.swatch-val  { font-size: 10px; color: var(--text-3); font-family: 'DM Mono', monospace; margin-top: 2px; }
+
+/* ─────────────────────────────────────────────────────────────
+   2 · TIPOGRAFI
+───────────────────────────────────────────────────────────────*/
+.type-list { display: flex; flex-direction: column; gap: 0; }
+.type-row {
+  display: flex; align-items: baseline; gap: 20px;
+  padding: 18px 0; border-bottom: 1px solid var(--border);
+  transition: border-color .3s;
+}
+.type-meta { flex: 0 0 150px; }
+.type-token { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.type-spec  { font-size: 11px; color: var(--text-3); margin-top: 2px; font-family: 'DM Mono', monospace; }
+.type-sample { flex: 1; color: var(--text-1); }
+
+/* ─────────────────────────────────────────────────────────────
+   3 · KARTU KPI
+───────────────────────────────────────────────────────────────*/
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 20px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  transition: box-shadow .2s, background .3s, border-color .3s;
+}
+.kpi-card:hover { box-shadow: var(--shadow-md); }
+.kpi-label { font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 6px; }
+.kpi-value { font-family: 'DM Mono', monospace; font-size: 26px; font-weight: 500; color: var(--text-1); line-height: 1.1; }
+.kpi-delta { font-size: 12px; font-weight: 600; margin-top: 5px; display: flex; align-items: center; gap: 3px; }
+.up   { color: var(--income);  }
+.down { color: var(--expense); }
+.kpi-spark { margin-top: 14px; }
+
+/* ─────────────────────────────────────────────────────────────
+   4 · KARTU PORTOFOLIO HERO
+───────────────────────────────────────────────────────────────*/
+.hero-card {
+  background: var(--primary); color: var(--primary-fg);
+  border-radius: 28px; padding: 36px;
+  position: relative; overflow: hidden;
+  box-shadow: var(--glow, none), var(--shadow-lg);
+  transition: background .3s, box-shadow .4s;
+}
+.hero-circle-a {
+  position: absolute; top: -70px; right: -70px;
+  width: 220px; height: 220px; border-radius: 50%;
+  background: rgba(255,255,255,0.07); pointer-events: none;
+}
+.hero-circle-b {
+  position: absolute; bottom: -50px; left: 36px;
+  width: 150px; height: 150px; border-radius: 50%;
+  background: rgba(255,255,255,0.04); pointer-events: none;
+}
+.hero-label { font-size: 14px; font-weight: 500; opacity: .7; margin-bottom: 8px; }
+.hero-value { font-family: 'DM Mono', monospace; font-size: 52px; font-weight: 500; line-height: 1.05; letter-spacing: -.02em; }
+.hero-sub   { font-size: 14px; opacity: .65; margin-top: 6px; }
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 18px;
+  background: rgba(255,255,255,0.15); backdrop-filter: blur(8px);
+  border-radius: 9999px; padding: 5px 14px;
+  font-size: 13px; font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.20);
+}
+.hero-metrics {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 20px;
+  margin-top: 28px; padding-top: 24px;
+  border-top: 1px solid rgba(255,255,255,0.15);
+}
+.metric-l { font-size: 12px; opacity: .6; margin-bottom: 4px; }
+.metric-v { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; }
+
+/* ─────────────────────────────────────────────────────────────
+   5 · GRAFIK
+───────────────────────────────────────────────────────────────*/
+.charts-row {
+  display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start;
+}
+.chart-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 24px; padding: 24px;
+  box-shadow: var(--shadow-sm); position: relative;
+  transition: background .3s, border-color .3s;
+}
+.chart-title { font-size: 15px; font-weight: 600; color: var(--text-1); margin-bottom: 20px; }
+
+/* Donut */
+.donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.legend { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+.leg-item { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-2); }
+.leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.leg-val { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--text-1); }
+
+/* Bar chart */
+.bar-wrap { position: relative; }
+.bar-tip {
+  position: absolute; pointer-events: none; z-index: 20;
+  background: var(--text-1); color: var(--bg);
+  border-radius: 10px; padding: 9px 14px;
+  font-size: 12px; font-weight: 500; line-height: 1.5;
+  transform: translateX(-50%) translateY(calc(-100% - 10px));
+  white-space: nowrap; opacity: 0;
+  transition: opacity .12s;
+  box-shadow: var(--shadow-lg);
+}
+.bar-tip.show { opacity: 1; }
+.bar-months { display: flex; justify-content: space-around; padding: 6px 10px 0; }
+.bar-month  { font-size: 11px; color: var(--text-3); }
+
+/* ─────────────────────────────────────────────────────────────
+   6 · TUMPUKAN KARTU 3D
+───────────────────────────────────────────────────────────────*/
+.stack-area { display: flex; justify-content: center; gap: 64px; flex-wrap: wrap; }
+.stack-label-top { font-size: 12px; font-weight: 500; color: var(--text-3); text-align: center; margin-bottom: 18px; }
+.stack-label-bot { font-size: 11px; color: var(--text-3); text-align: center; margin-top: 18px; }
+
+.scene {
+  perspective: 900px;
+  width: 300px; height: 200px; position: relative;
+}
+.sc {
+  position: absolute; width: 280px;
+  border-radius: 20px; padding: 24px;
+  transition: transform .35s cubic-bezier(.34,1.56,.64,1), box-shadow .35s;
+}
+.sc-back {
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--border);
+  transform: translateY(22px) scale(.94);
+  z-index: 1; box-shadow: var(--shadow-sm);
+  left: 24px; top: 0;
+}
+.sc-mid {
+  background: var(--surface-2); color: var(--text-1);
+  border: 1px solid var(--border);
+  transform: translateY(12px) scale(.97);
+  z-index: 2; box-shadow: var(--shadow-md);
+  left: 12px; top: 0;
+}
+.sc-front {
+  background: var(--primary); color: var(--primary-fg);
+  transform: translateY(0) scale(1);
+  z-index: 3;
+  box-shadow: var(--glow, none), var(--shadow-lg);
+  left: 0; top: 0;
+}
+.scene:hover .sc-front { transform: translateY(-10px) scale(1); }
+.scene:hover .sc-mid   { transform: translateY(8px)   scale(.97); }
+.scene:hover .sc-back  { transform: translateY(22px)  scale(.94); }
+
+.sc-tag  { font-size: 12px; opacity: .65; margin-bottom: 6px; }
+.sc-num  { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; margin-top: 4px; }
+.sc-sub  { font-size: 12px; opacity: .6; margin-top: 3px; }
+
+/* ─────────────────────────────────────────────────────────────
+   7 · NAVIGASI
+───────────────────────────────────────────────────────────────*/
+.nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+.nav-sect-label { font-size: 12px; font-weight: 500; color: var(--text-3); margin-bottom: 14px; }
+
+/* Tab bar */
+.tab-frame {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 24px; padding: 8px;
+  box-shadow: var(--shadow-md);
+  transition: background .3s;
+}
+.tab-inner {
+  background: var(--bg); border-radius: 18px; padding: 4px;
+  display: flex; justify-content: space-around;
+  transition: background .3s;
+}
+.tab-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 8px 10px;
+  border-radius: 14px; min-width: 52px; min-height: 48px;
+  font-size: 11px; font-weight: 500; color: var(--text-3);
+  cursor: pointer; user-select: none;
+  transition: background .15s, color .15s;
+}
+.tab-item.on { background: var(--primary); color: var(--primary-fg); }
+.tab-icon { font-size: 17px; line-height: 1; }
+
+/* Sidebar */
+.sidebar-frame {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 24px; padding: 16px;
+  box-shadow: var(--shadow-md); transition: background .3s;
+}
+.sb-brand {
+  font-size: 18px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--text-1); padding: 8px 12px 18px;
+}
+.sb-nav { display: flex; flex-direction: column; gap: 3px; }
+.sb-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 12px; min-height: 44px;
+  font-size: 14px; font-weight: 500; color: var(--text-2);
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.sb-item.on  { background: var(--primary); color: var(--primary-fg); }
+.sb-item:not(.on):hover { background: var(--bg); color: var(--text-1); }
+.sb-icon { font-size: 15px; width: 20px; text-align: center; }
+.sb-sync {
+  margin-top: 14px; padding: 10px 12px;
+  background: var(--bg); border-radius: 12px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-2);
+  transition: background .3s;
+}
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--income); flex-shrink: 0; }
+
+/* ─────────────────────────────────────────────────────────────
+   8 · ATOM KOMPONEN
+───────────────────────────────────────────────────────────────*/
+.atoms {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 24px; padding: 28px;
+  box-shadow: var(--shadow-sm);
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  transition: background .3s, border-color .3s;
+}
+.btn-p {
+  background: var(--primary); color: var(--primary-fg);
+  border: none; border-radius: 12px; padding: 10px 20px;
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; min-height: 44px;
+  transition: opacity .15s;
+}
+.btn-p:hover { opacity: .88; }
+.btn-g {
+  background: transparent; color: var(--text-2);
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 20px; font-family: inherit; font-size: 14px;
+  font-weight: 500; cursor: pointer; min-height: 44px;
+  transition: background .15s, color .15s;
+}
+.btn-g:hover { background: var(--surface-2); color: var(--text-1); }
+.btn-d {
+  background: var(--expense); color: var(--expense-fg);
+  border: none; border-radius: 12px; padding: 10px 20px;
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; min-height: 44px;
+  transition: opacity .15s;
+}
+.chip-in  { background: var(--income);  color: var(--income-fg);  border-radius: 9999px; padding: 4px 12px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; }
+.chip-ex  { background: var(--expense); color: var(--expense-fg); border-radius: 9999px; padding: 4px 12px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; }
+.chip-w   { background: var(--warn);    color: var(--warn-fg);    border-radius: 9999px; padding: 4px 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; }
+.chip-a   { background: var(--accent);  color: var(--accent-fg); border-radius: 9999px; padding: 4px 12px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; }
+.inp {
+  background: var(--surface-2); color: var(--text-1);
+  border: 1px solid var(--border-input); border-radius: 10px;
+  padding: 10px 16px; font-family: inherit; font-size: 14px;
+  min-height: 44px; width: 180px; outline: none;
+  transition: border-color .15s;
+}
+.inp:focus { border-color: var(--primary); }
+
+/* ─────────────────────────────────────────────────────────────
+   BADGE "CONTOH"
+───────────────────────────────────────────────────────────────*/
+.contoh {
+  position: absolute; top: 14px; right: 14px;
+  background: var(--warn); color: var(--warn-fg);
+  font-size: 9px; font-weight: 800; letter-spacing: .07em;
+  text-transform: uppercase; padding: 2px 8px; border-radius: 9999px;
+  opacity: .9;
+}
+.contoh-inv {
+  background: rgba(255,255,255,0.25); color: inherit;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────────────────────*/
+@media (max-width: 720px) {
+  .charts-row { grid-template-columns: 1fr; }
+  .nav-grid   { grid-template-columns: 1fr; }
+  .kpi-grid   { grid-template-columns: repeat(2, 1fr); }
+  .hero-value { font-size: 38px; }
+  .hero-metrics { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .main { padding: 32px 16px; }
+  .kpi-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body class="a-light">
+
+<!-- ── HEADER KONTROL ────────────────────────────────── -->
+<header class="ctrl-bar">
+  <div>
+    <span class="ctrl-brand">Artha</span>
+    <span class="ctrl-badge">Pratinjau Desain</span>
+  </div>
+  <div class="ctrl-group">
+    <div class="pill-row" id="pal-group" role="radiogroup" aria-label="Pilih palet">
+      <button class="pill-btn on" onclick="set('a')" role="radio" aria-checked="true">A · Lime &amp; Hutan</button>
+      <button class="pill-btn"   onclick="set('b')" role="radio" aria-checked="false">B · Sage &amp; Greige</button>
+    </div>
+    <div class="pill-row" id="mode-group" role="radiogroup" aria-label="Pilih tema">
+      <button class="pill-btn on" onclick="setMode('light')"  role="radio" aria-checked="true">☀ Terang</button>
+      <button class="pill-btn"   onclick="setMode('system')" role="radio" aria-checked="false">◐ Sistem</button>
+      <button class="pill-btn"   onclick="setMode('dark')"   role="radio" aria-checked="false">☾ Gelap</button>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- ─── 1 · TOKEN WARNA ─── -->
+  <section>
+    <p class="sec-title">1 · Token Warna</p>
+    <div class="swatch-grid" id="swatches"></div>
+  </section>
+
+  <!-- ─── 2 · TIPOGRAFI ─── -->
+  <section>
+    <p class="sec-title">2 · Tipografi</p>
+    <div class="type-list">
+      <div class="type-row">
+        <div class="type-meta"><div class="type-token">num-hero</div><div class="type-spec">DM Mono · 56px · 500</div></div>
+        <div class="type-sample num" style="font-size:56px;font-weight:500;line-height:1.05;letter-spacing:-.02em">Rp 14.250.000</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-token">num-lg</div><div class="type-spec">DM Mono · 32px · 500</div></div>
+        <div class="type-sample num" style="font-size:32px;font-weight:500;line-height:1.1;letter-spacing:-.01em">Rp 4.312.500</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-token">num-md</div><div class="type-spec">DM Mono · 16px · 400</div></div>
+        <div class="type-sample num" style="font-size:16px;font-weight:400">+0,00245 BTC&nbsp;&nbsp;&nbsp;&nbsp;Rp 1.250.000&nbsp;&nbsp;&nbsp;&nbsp;-12,4%</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-token">h1</div><div class="type-spec">Plus Jakarta Sans · 24px · 700</div></div>
+        <div class="type-sample" style="font-size:24px;font-weight:700;letter-spacing:-.02em">Investasi Portofolio</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-token">h2</div><div class="type-spec">Plus Jakarta Sans · 18px · 600</div></div>
+        <div class="type-sample" style="font-size:18px;font-weight:600;letter-spacing:-.01em">Posisi per Platform</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-token">body</div><div class="type-spec">Plus Jakarta Sans · 15px · 400</div></div>
+        <div class="type-sample" style="font-size:15px;font-weight:400;line-height:1.55;color:var(--text-2)">Rekening BRI Gold dipakai untuk pembelian emas fisik secara rutin setiap bulan. Saldo diperbarui otomatis setelah transaksi rutin berjalan.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-token">label</div><div class="type-spec">Plus Jakarta Sans · 13px · 500</div></div>
+        <div class="type-sample" style="font-size:13px;font-weight:500;color:var(--text-2)">Tanggal transaksi · Rekening · Kategori pengeluaran</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-token">muted</div><div class="type-spec">Plus Jakarta Sans · 12px · 400</div></div>
+        <div class="type-sample" style="font-size:12px;font-weight:400;color:var(--text-3)">Terakhir diperbarui 31 Okt 2026 · 09:15 · Tersinkron</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 3 · KARTU KPI ─── -->
+  <section>
+    <p class="sec-title">3 · Kartu KPI dengan Sparkline</p>
+    <div class="kpi-grid">
+
+      <div class="kpi-card">
+        <div class="contoh">contoh</div>
+        <div class="kpi-label">Pengeluaran bulan ini</div>
+        <div class="kpi-value">Rp 3.246.500</div>
+        <div class="kpi-delta down">↑ 12,3% dari bulan lalu</div>
+        <div class="kpi-spark">
+          <svg width="100%" height="40" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="g-exp" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="var(--expense)" stop-opacity=".28"/>
+                <stop offset="100%" stop-color="var(--expense)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,30 C20,28 30,24 50,20 S80,14 100,10 S130,8 160,6" fill="none" stroke="var(--expense)" stroke-width="2" stroke-linecap="round"/>
+            <path d="M0,30 C20,28 30,24 50,20 S80,14 100,10 S130,8 160,6 L160,40 L0,40Z" fill="url(#g-exp)"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="contoh">contoh</div>
+        <div class="kpi-label">Pemasukan bulan ini</div>
+        <div class="kpi-value">Rp 12.500.000</div>
+        <div class="kpi-delta up">→ tetap (gaji)</div>
+        <div class="kpi-spark">
+          <svg width="100%" height="40" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="g-inc" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="var(--income)" stop-opacity=".28"/>
+                <stop offset="100%" stop-color="var(--income)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,22 L160,22" fill="none" stroke="var(--income)" stroke-width="2"/>
+            <path d="M0,22 L160,22 L160,40 L0,40Z" fill="url(#g-inc)"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="contoh">contoh</div>
+        <div class="kpi-label">Nilai Investasi</div>
+        <div class="kpi-value">Rp 28.750.000</div>
+        <div class="kpi-delta up">↑ ROI +24,1%</div>
+        <div class="kpi-spark">
+          <svg width="100%" height="40" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="g-inv" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="var(--invest)" stop-opacity=".28"/>
+                <stop offset="100%" stop-color="var(--invest)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,36 C30,32 50,26 80,18 S120,10 160,4" fill="none" stroke="var(--invest)" stroke-width="2" stroke-linecap="round"/>
+            <path d="M0,36 C30,32 50,26 80,18 S120,10 160,4 L160,40 L0,40Z" fill="url(#g-inv)"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="contoh">contoh</div>
+        <div class="kpi-label">Saldo Gabungan</div>
+        <div class="kpi-value">Rp 8.430.000</div>
+        <div class="kpi-delta down">↓ setelah pengeluaran</div>
+        <div class="kpi-spark">
+          <svg width="100%" height="40" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="g-bal" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="var(--accent)" stop-opacity=".28"/>
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,10 C20,12 40,8 70,14 S110,20 140,22 S155,24 160,26" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+            <path d="M0,10 C20,12 40,8 70,14 S110,20 140,22 S155,24 160,26 L160,40 L0,40Z" fill="url(#g-bal)"/>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── 4 · KARTU PORTOFOLIO HERO ─── -->
+  <section>
+    <p class="sec-title">4 · Kartu Portofolio (Angka Besar)</p>
+    <div class="hero-card">
+      <div class="hero-circle-a"></div>
+      <div class="hero-circle-b"></div>
+      <div class="contoh contoh-inv">contoh</div>
+      <div class="hero-label">Total Nilai Portofolio</div>
+      <div class="hero-value">Rp 28.750.000</div>
+      <div class="hero-sub">Modal masuk Rp 23.150.000</div>
+      <div><span class="hero-tag">↑ +24,1% ROI &nbsp;·&nbsp; CAGR 18,3% &nbsp;·&nbsp; XIRR 21,4%</span></div>
+      <div class="hero-metrics">
+        <div>
+          <div class="metric-l">BTC · Floq</div>
+          <div class="metric-v">Rp 15.400.000</div>
+        </div>
+        <div>
+          <div class="metric-l">Emas · BRI</div>
+          <div class="metric-v">Rp 13.350.000</div>
+        </div>
+        <div>
+          <div class="metric-l">Untung / Rugi</div>
+          <div class="metric-v" style="color:rgba(255,255,255,0.95)">+Rp 5.600.000</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 5 · GRAFIK ─── -->
+  <section>
+    <p class="sec-title">5 · Grafik Cincin &amp; Grafik Batang</p>
+    <div class="charts-row">
+
+      <!-- Donut -->
+      <div class="chart-card">
+        <div class="contoh">contoh</div>
+        <div class="chart-title">Pengeluaran Oktober</div>
+        <div class="donut-wrap">
+          <!-- r=56 · C=351.86 -->
+          <svg width="180" height="180" viewBox="0 0 180 180" aria-label="Grafik cincin pengeluaran Oktober (data contoh)">
+            <!-- track -->
+            <circle cx="90" cy="90" r="56" fill="none" stroke="var(--border)" stroke-width="24"/>
+            <!-- Makan 40% = 140.74 -->
+            <circle cx="90" cy="90" r="56" fill="none" stroke="var(--expense)" stroke-width="24"
+              stroke-dasharray="140.74 211.12" stroke-dashoffset="0" transform="rotate(-90 90 90)"/>
+            <!-- Transport 20% = 70.37, off=-140.74 -->
+            <circle cx="90" cy="90" r="56" fill="none" stroke="var(--warn)" stroke-width="24"
+              stroke-dasharray="70.37 281.49" stroke-dashoffset="-140.74" transform="rotate(-90 90 90)"/>
+            <!-- Hiburan 15% = 52.78, off=-211.11 -->
+            <circle cx="90" cy="90" r="56" fill="none" stroke="var(--invest)" stroke-width="24"
+              stroke-dasharray="52.78 299.08" stroke-dashoffset="-211.11" transform="rotate(-90 90 90)"/>
+            <!-- Lainnya 25% = 87.97, off=-263.89 -->
+            <circle cx="90" cy="90" r="56" fill="none" stroke="var(--surface-2)" stroke-width="24"
+              stroke-dasharray="87.97 263.89" stroke-dashoffset="-263.89" transform="rotate(-90 90 90)"/>
+            <!-- label tengah -->
+            <text x="90" y="85" text-anchor="middle" font-family="'DM Mono',monospace" font-size="17" font-weight="500" fill="var(--text-1)">Rp 3,2jt</text>
+            <text x="90" y="101" text-anchor="middle" font-family="'Plus Jakarta Sans',sans-serif" font-size="11" fill="var(--text-3)">Oktober</text>
+          </svg>
+          <div class="legend" role="list" aria-label="Legenda">
+            <div class="leg-item" role="listitem"><div class="leg-dot" style="background:var(--expense)" aria-hidden="true"></div>Makan &amp; Minum<span class="leg-val">40%</span></div>
+            <div class="leg-item" role="listitem"><div class="leg-dot" style="background:var(--warn)"    aria-hidden="true"></div>Transportasi<span class="leg-val">20%</span></div>
+            <div class="leg-item" role="listitem"><div class="leg-dot" style="background:var(--invest)"  aria-hidden="true"></div>Hiburan<span class="leg-val">15%</span></div>
+            <div class="leg-item" role="listitem"><div class="leg-dot" style="background:var(--surface-2);border:1px solid var(--border)" aria-hidden="true"></div>Lainnya<span class="leg-val">25%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bar chart -->
+      <div class="chart-card">
+        <div class="contoh">contoh</div>
+        <div class="chart-title">Arus Kas 6 Bulan Terakhir</div>
+        <div class="bar-wrap">
+          <div id="tip" class="bar-tip" role="tooltip" aria-live="polite"></div>
+          <svg id="barchart" width="100%" height="200" viewBox="0 0 480 200" preserveAspectRatio="xMidYMid meet"
+               aria-label="Grafik batang arus kas 6 bulan (data contoh)"></svg>
+          <div class="bar-months" id="bar-months"></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── 6 · TUMPUKAN KARTU 3D ─── -->
+  <section>
+    <p class="sec-title">6 · Tumpukan Kartu 3D (arahkan kursor)</p>
+    <div class="stack-area">
+      <div>
+        <div class="stack-label-top">Akun Investasi</div>
+        <div class="scene" role="img" aria-label="Tumpukan 3 kartu akun investasi (data contoh)">
+          <div class="sc sc-back">
+            <div class="sc-tag">BRI · Emas</div>
+            <div class="sc-num">Rp 13.350.000</div>
+          </div>
+          <div class="sc sc-mid">
+            <div class="sc-tag">Floq · BTC</div>
+            <div class="sc-num">Rp 15.400.000</div>
+          </div>
+          <div class="sc sc-front">
+            <div class="sc-tag">Total Portofolio</div>
+            <div class="sc-num">Rp 28.750.000</div>
+            <div class="sc-sub">↑ +24,1% ROI</div>
+          </div>
+        </div>
+        <div class="stack-label-bot">⬆ data contoh</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 7 · NOMINAL PANJANG ─── -->
+  <section>
+    <p class="sec-title">7 · Nominal Panjang — Fluid Size &amp; Singkatan</p>
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+      <!-- Fluid: full value -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:28px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden;">
+        <div class="contoh">contoh</div>
+        <div style="font-size:12px;font-weight:500;color:var(--text-3);margin-bottom:10px;">Saldo utama (num-hero · clamp 28px→56px · nominal penuh)</div>
+        <div id="num-hero-demo" class="num" style="font-size:clamp(28px,7.5vw,56px);font-weight:500;line-height:1.05;letter-spacing:-.02em;color:var(--text-1);" title="Rp 1.234.567.890">
+          Rp 1.234.567.890
+        </div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:8px;">Nilai penuh · tidak terpotong pada 360 px berkat <code style="font-family:'DM Mono',monospace;font-size:11px;background:var(--surface-2);padding:1px 5px;border-radius:4px;">clamp(28px, 7.5vw, 56px)</code></div>
+      </div>
+
+      <!-- Abbreviated -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow-sm);">
+          <div style="font-size:12px;font-weight:500;color:var(--text-3);margin-bottom:8px;">≥ 1 Triliun</div>
+          <div class="num" style="font-size:clamp(20px,4.5vw,32px);font-weight:500;color:var(--text-1);" title="Rp 1.234.567.890.123">Rp 1,23 T</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:5px;">hover/tap → nilai penuh</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow-sm);">
+          <div style="font-size:12px;font-weight:500;color:var(--text-3);margin-bottom:8px;">≥ 1 Miliar</div>
+          <div class="num" style="font-size:clamp(20px,4.5vw,32px);font-weight:500;color:var(--text-1);" title="Rp 28.750.000.000">Rp 28,75 M</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:5px;">hover/tap → nilai penuh</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow-sm);">
+          <div style="font-size:12px;font-weight:500;color:var(--text-3);margin-bottom:8px;">≥ 1 Juta</div>
+          <div class="num" style="font-size:clamp(20px,4.5vw,32px);font-weight:500;color:var(--text-1);" title="Rp 3.246.500">Rp 3,25 Jt</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:5px;">hover/tap → nilai penuh</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow-sm);">
+          <div style="font-size:12px;font-weight:500;color:var(--text-3);margin-bottom:8px;">&lt; 1 Juta</div>
+          <div class="num" style="font-size:clamp(20px,4.5vw,32px);font-weight:500;color:var(--text-1);" title="Rp 450.000">Rp 450.000</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:5px;">tampil penuh</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 8 · POLA NAVIGASI ─── -->
+  <section>
+    <p class="sec-title">8 · Pola Navigasi</p>
+    <div class="nav-grid">
+
+      <!-- Tab bar mobile -->
+      <div>
+        <div class="nav-sect-label">Tab Bar Mobile (375px) — safe area bawah aktif</div>
+        <div class="tab-frame">
+          <div class="tab-inner" role="tablist" aria-label="Navigasi utama">
+            <div class="tab-item on" role="tab" aria-selected="true"  aria-label="Ringkasan">
+              <span class="tab-icon" aria-hidden="true">▦</span>
+              <span>Ringkasan</span>
+            </div>
+            <div class="tab-item" role="tab" aria-selected="false" aria-label="Transaksi">
+              <span class="tab-icon" aria-hidden="true">＋</span>
+              <span>Transaksi</span>
+            </div>
+            <div class="tab-item" role="tab" aria-selected="false" aria-label="Investasi">
+              <span class="tab-icon" aria-hidden="true">↗</span>
+              <span>Investasi</span>
+            </div>
+            <div class="tab-item" role="tab" aria-selected="false" aria-label="Rutin">
+              <span class="tab-icon" aria-hidden="true">↻</span>
+              <span>Rutin</span>
+            </div>
+            <div class="tab-item" role="tab" aria-selected="false" aria-label="Pengaturan">
+              <span class="tab-icon" aria-hidden="true">⚙</span>
+              <span>Pengaturan</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar desktop -->
+      <div>
+        <div class="nav-sect-label">Sidebar Desktop (224px) — sticky top-0 h-screen</div>
+        <div class="sidebar-frame">
+          <div class="sb-brand">Artha</div>
+          <nav class="sb-nav" aria-label="Navigasi samping">
+            <div class="sb-item on" aria-current="page">
+              <span class="sb-icon" aria-hidden="true">▦</span>Ringkasan
+            </div>
+            <div class="sb-item">
+              <span class="sb-icon" aria-hidden="true">＋</span>Transaksi
+            </div>
+            <div class="sb-item">
+              <span class="sb-icon" aria-hidden="true">↗</span>Investasi
+            </div>
+            <div class="sb-item">
+              <span class="sb-icon" aria-hidden="true">↻</span>Rutin
+            </div>
+            <div class="sb-item">
+              <span class="sb-icon" aria-hidden="true">⚙</span>Pengaturan
+            </div>
+          </nav>
+          <div class="sb-sync">
+            <div class="sync-dot" aria-hidden="true"></div>
+            <span>Tersinkron</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── 9 · ATOM KOMPONEN ─── -->
+  <section>
+    <p class="sec-title">9 · Atom Komponen</p>
+    <div class="atoms">
+      <button class="btn-p">Simpan</button>
+      <button class="btn-g">Batal</button>
+      <button class="btn-d">Hapus</button>
+      <span class="chip-in">↑ Rp 12.500.000</span>
+      <span class="chip-ex">↓ Rp 3.246.500</span>
+      <span class="chip-a">+24,1% ROI</span>
+      <span class="chip-w">2 gagal sinkron</span>
+      <input class="inp" type="text" placeholder="Rp 0" aria-label="Nominal" />
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* ─── State ─── */
+let pal      = 'a';
+let mode     = 'light'; /* 'light' | 'dark' | 'system' */
+let resolved = 'light'; /* aktual yang diterapkan ke body */
+
+function resolveTheme(m) {
+  if (m === 'system') return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return m;
+}
+
+/* Ikuti perubahan OS saat mode = 'system' */
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (mode === 'system') { resolved = resolveTheme('system'); applyTheme(); }
+});
+
+/* ─── Swatch data ─── */
+const SWATCHES = [
+  { name: 'Latar',           v: '--bg' },
+  { name: 'Permukaan',       v: '--surface' },
+  { name: 'Permukaan 2',     v: '--surface-2' },
+  { name: 'Teks Utama',      v: '--text-1' },
+  { name: 'Teks Sekunder',   v: '--text-2' },
+  { name: 'Teks Redup',      v: '--text-3' },
+  { name: 'Border',          v: '--border' },
+  { name: 'Border Input',    v: '--border-input' },
+  { name: 'Aksen',           v: '--accent' },
+  { name: 'Aksen FG',        v: '--accent-fg' },
+  { name: 'Primer',          v: '--primary' },
+  { name: 'Primer FG',       v: '--primary-fg' },
+  { name: 'Pemasukan',       v: '--income' },
+  { name: 'Pemasukan FG',    v: '--income-fg' },
+  { name: 'Pengeluaran',     v: '--expense' },
+  { name: 'Pengeluaran FG',  v: '--expense-fg' },
+  { name: 'Peringatan',      v: '--warn' },
+  { name: 'Peringatan FG',   v: '--warn-fg' },
+  { name: 'Investasi',       v: '--invest' },
+];
+
+function renderSwatches() {
+  const el = document.getElementById('swatches');
+  const cs = getComputedStyle(document.body);
+  el.innerHTML = SWATCHES.map(s => {
+    const val = cs.getPropertyValue(s.v).trim();
+    return `<div class="swatch">
+      <div class="swatch-color" style="background:var(${s.v})" aria-hidden="true"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">${s.name}</div>
+        <div class="swatch-val">${val}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function applyTheme() {
+  resolved = resolveTheme(mode);
+  document.body.className = `${pal}-${resolved}`;
+  /* Tunggu repaint agar getComputedStyle membaca nilai baru */
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    renderSwatches();
+    renderBar();
+  }));
+}
+
+function set(p) {
+  pal = p;
+  const opts = ['a', 'b'];
+  document.querySelectorAll('#pal-group .pill-btn').forEach((b, i) => {
+    const active = opts[i] === p;
+    b.classList.toggle('on', active);
+    b.setAttribute('aria-checked', String(active));
+  });
+  applyTheme();
+}
+
+function setMode(m) {
+  mode = m;
+  const opts = ['light', 'system', 'dark'];
+  document.querySelectorAll('#mode-group .pill-btn').forEach((b, i) => {
+    const active = opts[i] === m;
+    b.classList.toggle('on', active);
+    b.setAttribute('aria-checked', String(active));
+  });
+  applyTheme();
+}
+
+/* ─── Bar chart ─── */
+const BAR_DATA = [
+  { m: 'Mei', inc: 12500000, exp: 4100000 },
+  { m: 'Jun', inc: 12500000, exp: 3800000 },
+  { m: 'Jul', inc: 12500000, exp: 5200000 },
+  { m: 'Ags', inc: 12500000, exp: 4600000 },
+  { m: 'Sep', inc: 12500000, exp: 3900000 },
+  { m: 'Okt', inc: 12500000, exp: 3247000 },
+];
+
+const IDR = n => 'Rp ' + n.toLocaleString('id-ID');
+
+function renderBar() {
+  const svg   = document.getElementById('barchart');
+  const tip   = document.getElementById('tip');
+  const wrap  = svg.parentElement;
+  const mEl   = document.getElementById('bar-months');
+
+  const W = 480, H = 200;
+  const PT = 18, PB = 4, PL = 8, PR = 8;
+  const innerW = W - PL - PR;
+  const innerH = H - PT - PB;
+  const MAX = 14000000;
+  const N = BAR_DATA.length;
+  const grpW  = innerW / N;
+  const bW    = grpW * 0.30;
+  const gap   = grpW * 0.05;
+
+  /* grid lines */
+  let out = '';
+  [.25, .5, .75, 1].forEach(f => {
+    const y = PT + innerH * (1 - f);
+    out += `<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`;
+  });
+
+  BAR_DATA.forEach((d, i) => {
+    const cx   = PL + grpW * i + grpW / 2;
+    const iH   = (d.inc / MAX) * innerH;
+    const eH   = (d.exp / MAX) * innerH;
+    const iY   = PT + innerH - iH;
+    const eY   = PT + innerH - eH;
+    const isLast = i === N - 1;
+    const alpha  = isLast ? 1 : 0.45;
+
+    /* income bar */
+    out += `<rect
+      x="${(cx - bW - gap).toFixed(1)}" y="${iY.toFixed(1)}"
+      width="${bW.toFixed(1)}" height="${iH.toFixed(1)}"
+      rx="5" fill="var(--income)" opacity="${alpha}"
+      data-m="${d.m}" data-i="${d.inc}" data-e="${d.exp}" data-cx="${cx.toFixed(1)}"
+      style="cursor:pointer" tabindex="0" role="img" aria-label="${d.m} pemasukan ${IDR(d.inc)}"/>`;
+
+    /* expense bar */
+    out += `<rect
+      x="${(cx + gap).toFixed(1)}" y="${eY.toFixed(1)}"
+      width="${bW.toFixed(1)}" height="${eH.toFixed(1)}"
+      rx="5" fill="var(--expense)" opacity="${alpha}"
+      data-m="${d.m}" data-i="${d.inc}" data-e="${d.exp}" data-cx="${cx.toFixed(1)}"
+      style="cursor:pointer" tabindex="0" role="img" aria-label="${d.m} pengeluaran ${IDR(d.exp)}"/>`;
+
+    /* highlight ring on last bar */
+    if (isLast) {
+      out += `<rect x="${(cx-bW-gap-2).toFixed(1)}" y="${(iY-2).toFixed(1)}" width="${(bW+4).toFixed(1)}" height="${(iH+2).toFixed(1)}" rx="6" fill="none" stroke="var(--income)" stroke-width="1.5" opacity=".35"/>`;
+      out += `<rect x="${(cx+gap-2).toFixed(1)}"    y="${(eY-2).toFixed(1)}" width="${(bW+4).toFixed(1)}" height="${(eH+2).toFixed(1)}" rx="6" fill="none" stroke="var(--expense)" stroke-width="1.5" opacity=".35"/>`;
+    }
+  });
+
+  svg.innerHTML = out;
+
+  /* month labels */
+  mEl.innerHTML = BAR_DATA.map(d => `<span class="bar-month">${d.m}</span>`).join('');
+
+  /* tooltip */
+  svg.querySelectorAll('rect[data-m]').forEach(r => {
+    const show = (e) => {
+      const d = r.dataset;
+      tip.innerHTML = `<strong>${d.m}</strong><br>Masuk: ${IDR(+d.i)}<br>Keluar: ${IDR(+d.e)}`;
+      const wRect = wrap.getBoundingClientRect();
+      const x = e.clientX - wRect.left;
+      const y = e.clientY - wRect.top;
+      tip.style.left = x + 'px';
+      tip.style.top  = y + 'px';
+      tip.classList.add('show');
+    };
+    const move = (e) => {
+      const wRect = wrap.getBoundingClientRect();
+      tip.style.left = (e.clientX - wRect.left) + 'px';
+      tip.style.top  = (e.clientY - wRect.top)  + 'px';
+    };
+    const hide = () => tip.classList.remove('show');
+    r.addEventListener('mouseenter', show);
+    r.addEventListener('mousemove',  move);
+    r.addEventListener('mouseleave', hide);
+    r.addEventListener('focus', show);
+    r.addEventListener('blur',  hide);
+  });
+}
+
+/* ─── Tilt pointer-tracking pada kartu terdepan 3D ─── */
+(function () {
+  const front = document.querySelector('.sc-front');
+  if (!front || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const scene = front.closest('.scene');
+  scene.addEventListener('pointermove', (e) => {
+    const rect = scene.getBoundingClientRect();
+    const cx = (e.clientX - rect.left) / rect.width  - 0.5;
+    const cy = (e.clientY - rect.top)  / rect.height - 0.5;
+    front.style.transform = `translateY(-10px) rotateY(${(cx * 14).toFixed(1)}deg) rotateX(${(-cy * 9).toFixed(1)}deg) scale(1)`;
+  });
+  scene.addEventListener('pointerleave', () => {
+    front.style.transform = '';
+  });
+})();
+
+/* ─── Init ─── */
+applyTheme();
+</script>
+</body>
+</html>
