@@ -162,6 +162,30 @@ async function runPlaywright() {
   const browser = await pw.chromium.launch()
 
   try {
+    // Konsol browser bersih — kumpulkan error/warning di semua tab
+    {
+      const TABS_HASH = ['home', 'tx', 'inv', 'rec', 'set']
+      const consoleErrors: string[] = []
+      const p = await browser.newPage()
+      p.on('console', (msg) => {
+        if (msg.type() === 'error' || msg.type() === 'warning') {
+          const txt = msg.text()
+          // Abaikan warning browser bawaan tentang SW saat preview
+          if (/service.worker|insecure|deprecated/i.test(txt)) return
+          consoleErrors.push(`[${msg.type()}] ${txt.slice(0, 120)}`)
+        }
+      })
+      await p.setViewportSize({ width: 390, height: 700 })
+      for (const tab of TABS_HASH) {
+        await p.goto(`${BASE}/#${tab}`)
+        await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+        await p.waitForTimeout(300)
+      }
+      check('Browser: konsol bersih di semua tab (390px)', consoleErrors.length === 0,
+        consoleErrors.slice(0, 5).join(' | '))
+      await p.close()
+    }
+
     // Palet default B (localStorage kosong)
     {
       const p = await browser.newPage()

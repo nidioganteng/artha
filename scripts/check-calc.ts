@@ -1,5 +1,6 @@
-// Uji cepat kalkulasi investasi. Jalankan: npm run check:calc
+// Uji cepat kalkulasi investasi + fungsi murni format. Jalankan: npm run check:calc
 import { computePosition, flowsOf, summarize, xirr } from '../src/lib/calc'
+import { parseNum, todayISO } from '../src/lib/format'
 
 let failed = 0
 function ok(name: string, cond: boolean, detail = '') {
@@ -78,6 +79,34 @@ ok('portofolio: PL 0', near(sum.totalPL, 0))
 
 // 7) XIRR tanpa solusi
 ok('xirr 1 arus kas = null', xirr(flowsOf([{ side: 'buy', quantity: 1, price: 1, fee: 0, date: '2026-01-01' }])) === null)
+
+// 8) parseNum — format Indonesia dan edge case
+const pn = (s: string, d = false) => parseNum(s, d)
+ok('parseNum "1.500.000"', pn('1.500.000') === 1_500_000)
+ok('parseNum "0,0025"', pn('0,0025') === 0.0025)
+ok('parseNum "0.0025" (desimal)', pn('0.0025') === 0.0025)
+ok('parseNum "0.0025" dotIsDecimal', pn('0.0025', true) === 0.0025)
+ok('parseNum "" = NaN', isNaN(pn('')))
+ok('parseNum "-500"', pn('-500') === -500)
+ok('parseNum "0"', pn('0') === 0)
+ok('parseNum "9999999999"', pn('9999999999') === 9_999_999_999)
+
+// 9) Tanggal Rutin akhir bulan (Feb, Apr)
+function dueDate(month: string, dayOfMonth: number): string {
+  const [y, m] = month.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  return `${month}-${String(Math.min(dayOfMonth, last)).padStart(2, '0')}`
+}
+ok('Rutin tgl 29 di Feb 2025 -> 28', dueDate('2025-02', 29) === '2025-02-28')
+ok('Rutin tgl 31 di Feb 2025 -> 28', dueDate('2025-02', 31) === '2025-02-28')
+ok('Rutin tgl 31 di Apr 2025 -> 30', dueDate('2025-04', 31) === '2025-04-30')
+ok('Rutin tgl 29 di Feb 2024 (kabisat)', dueDate('2024-02', 29) === '2024-02-29')
+ok('Rutin tgl 31 di Jan 2025', dueDate('2025-01', 31) === '2025-01-31')
+
+// 10) todayISO memakai zona waktu lokal (bukan UTC)
+const now = new Date()
+const localStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+ok('todayISO zona waktu lokal', todayISO() === localStr)
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
 process.exit(failed === 0 ? 0 : 1)
