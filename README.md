@@ -39,7 +39,7 @@ Aplikasi pencatatan keuangan pribadi: pemasukan, pengeluaran, transaksi rutin bu
 ## Instalasi Lokal
 
 ```bash
-git clone <url-repo-ini>
+git clone https://github.com/nidio/artha.git
 cd artha
 npm install
 ```
