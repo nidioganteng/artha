@@ -355,6 +355,43 @@ body {
     color: var(--text-2);
   }
 
+  /* Input Rupiah: wrapper tampil seperti .input, prefiks "Rp" di kiri */
+  .money-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border-input);
+    border-radius: var(--radius-sm);
+    padding: 0 16px;
+    min-height: 44px;
+    transition: border-color 150ms ease-out, outline 150ms ease-out;
+  }
+  .money-input-wrap:focus-within {
+    outline: 2px solid var(--primary);
+    outline-offset: 0;
+    border-color: transparent;
+  }
+  .money-input-prefix {
+    font-size: 15px;
+    color: var(--text-3);
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .money-input-field {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 15px;
+    outline: none;
+    padding: 10px 0;
+  }
+  .money-input-field::placeholder { color: var(--text-3); }
+
   .muted {
     font-size: 13px;
     color: var(--text-3);
@@ -498,6 +535,8 @@ body {
   padding: 16px 20px;
   flex: 1;
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 .sheet-footer {
