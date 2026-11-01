@@ -82,6 +82,8 @@ check('CSS: .sheet-dialog base tanpa display', !baseBlock.includes('display'),
 check('CSS: .sheet-dialog[open] ada dengan display',
   css.includes('.sheet-dialog[open]') && /\.sheet-dialog\[open\]\s*\{[^}]*display/.test(css))
 check('CSS: .sheet-footer terdefinisi', css.includes('.sheet-footer {'))
+// Sheet scrollbar styling
+check('CSS: .sheet-content scrollbar-width thin', css.includes('scrollbar-width: thin'))
 
 // Halaman: form id + tombol footer
 check('Transactions: form id="form-tx"', txPage.includes('id="form-tx"'))
@@ -288,6 +290,49 @@ async function runPlaywright() {
       } else {
         check(`Sheet Tx ${vp.w}x${vp.h}: tombol buka ditemukan`, false, 'tombol Tambah tidak ditemukan di halaman')
         check(`Sheet Tx ${vp.w}x${vp.h}: tombol Simpan terlihat`, false, 'sheet tidak bisa dibuka')
+      }
+      await p.close()
+    }
+
+    // Sheet alignment: panel terpusat dan lebar input = lebar tombol Simpan
+    for (const vp of [{ w: 390, h: 700 }, { w: 768, h: 900 }, { w: 1000, h: 560 }]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: vp.w, height: vp.h })
+      await p.goto(`${BASE}/#tx`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+
+      const opened = await p.evaluate(`(function() {
+        var btns = Array.from(document.querySelectorAll('button'));
+        var add = btns.find(function(b) {
+          return (b.textContent.trim() === 'Tambah' || b.textContent.includes('Tambah Transaksi'))
+            && !b.closest('dialog');
+        });
+        if (add) { add.click(); return true; }
+        return false;
+      })()`) as boolean
+
+      if (opened) {
+        await p.waitForTimeout(400)
+        const res = await p.evaluate(`(function(vw) {
+          var dialog = document.querySelector('dialog[open]');
+          if (!dialog) return { ok: false, detail: 'dialog tidak ditemukan' };
+          var panel = dialog.querySelector('.sheet-inner');
+          if (!panel) return { ok: false, detail: 'sheet-inner tidak ditemukan' };
+          var pr = panel.getBoundingClientRect();
+          var leftMargin = pr.left;
+          var rightMargin = vw - pr.right;
+          var centerDiff = Math.abs(leftMargin - rightMargin);
+          var input = dialog.querySelector('[class="money-input-wrap"]');
+          var btn = dialog.querySelector('.sheet-footer button');
+          var inputW = input ? input.getBoundingClientRect().width : -1;
+          var btnW = btn ? btn.getBoundingClientRect().width : -1;
+          var widthDiff = inputW >= 0 && btnW >= 0 ? Math.abs(inputW - btnW) : 0;
+          var ok = centerDiff < 2 && widthDiff < 2;
+          return { ok: ok, detail: 'center diff ' + Math.round(centerDiff * 10) / 10 + 'px, input/btn diff ' + Math.round(widthDiff * 10) / 10 + 'px' };
+        })(${vp.w})`) as { ok: boolean; detail: string }
+        check(`Sheet ${vp.w}px: panel terpusat dan lebar input = Simpan`, res.ok, res.detail)
+      } else {
+        check(`Sheet ${vp.w}px: panel terpusat dan lebar input = Simpan`, false, 'sheet tidak bisa dibuka')
       }
       await p.close()
     }
