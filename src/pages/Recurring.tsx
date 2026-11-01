@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../lib/store'
-import { monthKey, monthLabel, parseNum, shiftMonth, todayISO } from '../lib/format'
+import { monthKey, monthLabel, shiftMonth, todayISO } from '../lib/format'
 import { formatShort } from '../lib/amount'
-import { Sheet, EmptyState, Field, Chip } from '../ui'
+import { Sheet, EmptyState, Field, Chip, MoneyInput } from '../ui'
 import type { RecurringRule } from '../lib/types'
 
 const KIND_LABEL: Record<RecurringRule['kind'], string> = {
@@ -22,7 +22,7 @@ export default function Recurring() {
   // Form state
   const [name, setName] = useState('')
   const [kind, setKind] = useState<RecurringRule['kind']>('expense')
-  const [amount, setAmount] = useState('')
+  const [amountVal, setAmountVal] = useState<number | null>(null)
   const [day, setDay] = useState('1')
   const [categoryId, setCategoryId] = useState('')
   const [formError, setFormError] = useState('')
@@ -83,7 +83,7 @@ export default function Recurring() {
 
   function openAdd() {
     setName('')
-    setAmount('')
+    setAmountVal(null)
     setDay('1')
     setCategoryId('')
     setFormError('')
@@ -92,16 +92,15 @@ export default function Recurring() {
 
   function addRule(e: FormEvent) {
     e.preventDefault()
-    const n = parseNum(amount)
     const d = Number(day)
     if (!name.trim()) return setFormError('Nama wajib diisi.')
-    if (!Number.isFinite(n) || n <= 0) return setFormError('Nominal harus lebih dari 0.')
+    if (amountVal == null || amountVal <= 0) return setFormError('Nominal harus lebih dari 0.')
     if (!Number.isInteger(d) || d < 1 || d > 31) return setFormError('Tanggal harus 1 sampai 31.')
     setFormError('')
     save('recurring_rules', {
       name: name.trim(),
       kind,
-      amount: n,
+      amount: amountVal,
       day_of_month: d,
       category_id: kind === 'invest' ? null : categoryId || null,
       account_id: db.accounts[0]?.id ?? null,
@@ -385,15 +384,8 @@ export default function Recurring() {
             </select>
           </Field>
 
-          <Field label="Nominal (Rp)" htmlFor="rec-amt">
-            <input
-              id="rec-amt"
-              className="input"
-              inputMode="decimal"
-              placeholder="500.000"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
+          <Field label="Nominal" htmlFor="rec-amt">
+            <MoneyInput id="rec-amt" value={amountVal} onValueChange={setAmountVal} placeholder="500.000" />
           </Field>
 
           <Field label="Tanggal tiap bulan" htmlFor="rec-day">
@@ -403,7 +395,7 @@ export default function Recurring() {
               inputMode="numeric"
               placeholder="1"
               value={day}
-              onChange={(e) => setDay(e.target.value)}
+              onChange={(e) => setDay(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
             />
           </Field>
 

@@ -3,8 +3,8 @@ import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { usePortfolio, toLite } from '../lib/usePortfolio'
 import { computePosition } from '../lib/calc'
-import { dateLabel, idr, num, parseNum, pct, todayISO } from '../lib/format'
-import { Sheet, EmptyState, Field, AmountText } from '../ui'
+import { dateLabel, idr, num, pct, todayISO } from '../lib/format'
+import { Sheet, EmptyState, Field, AmountText, MoneyInput, QuantityInput } from '../ui'
 
 function plColor(n: number | null | undefined): string {
   if (n == null) return 'var(--text-2)'
@@ -59,20 +59,21 @@ export default function Investments() {
   const effectivePlatformId =
     db.platforms.find((p) => p.id === platformId)?.id ?? db.platforms[0]?.id ?? ''
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
-  const [qty, setQty] = useState('')
+  const [qtyVal, setQtyVal] = useState<number | null>(null)
   const [mode, setMode] = useState<'unit' | 'total'>('total')
-  const [priceIn, setPriceIn] = useState('')
-  const [fee, setFee] = useState('')
+  const [priceVal, setPriceVal] = useState<number | null>(null)
+  const [feeVal, setFeeVal] = useState<number | null>(null)
   const [date, setDate] = useState(todayISO())
   const [formError, setFormError] = useState('')
-  const [manual, setManual] = useState<Record<string, string>>({})
+  const [manualVal, setManualVal] = useState<Record<string, number | null>>({})
 
   const asset = db.assets.find((a) => a.id === effectiveAssetId)
+  const maxDecimals = asset?.asset_type === 'gold' ? 4 : 8
 
   function openAdd() {
-    setQty('')
-    setPriceIn('')
-    setFee('')
+    setQtyVal(null)
+    setPriceVal(null)
+    setFeeVal(null)
     setDate(todayISO())
     setFormError('')
     setOpen(true)
@@ -80,16 +81,15 @@ export default function Investments() {
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    const q = parseNum(qty, true)
-    const p = parseNum(priceIn)
-    const f = fee.trim() ? parseNum(fee) : 0
+    const q = qtyVal ?? 0
+    const p = priceVal ?? 0
+    const f = feeVal ?? 0
     if (!asset) return setFormError('Pilih aset dulu (tambahkan di Pengaturan bila belum ada).')
-    if (!Number.isFinite(q) || q <= 0) return setFormError('Jumlah unit harus lebih dari 0.')
-    if (!Number.isFinite(p) || p < 0)
-      return setFormError(
-        mode === 'total' ? 'Total Rp tidak valid.' : 'Harga per unit tidak valid.',
-      )
-    if (!Number.isFinite(f) || f < 0) return setFormError('Biaya tidak valid.')
+    if (q <= 0) return setFormError('Jumlah unit harus lebih dari 0.')
+    if (p < 0) return setFormError(
+      mode === 'total' ? 'Total Rp tidak valid.' : 'Harga per unit tidak valid.',
+    )
+    if (f < 0) return setFormError('Biaya tidak valid.')
     const perUnit = mode === 'total' ? p / q : p
     setFormError('')
     save('trades', {
@@ -106,13 +106,18 @@ export default function Investments() {
   }
 
   function saveManual(id: string) {
-    const v = parseNum(manual[id] ?? '')
-    if (!Number.isFinite(v) || v < 0) return
+    const v = manualVal[id]
+    if (v == null || v <= 0) return
     const a = db.assets.find((x) => x.id === id)
     if (!a) return
     save('assets', { ...a, manual_price: v, manual_price_at: new Date().toISOString() })
-    setManual((m) => ({ ...m, [id]: '' }))
+    setManualVal((m) => ({ ...m, [id]: null }))
   }
+
+  // Total Rp saat mode = harga per unit
+  const unitTotal = mode === 'unit' && qtyVal != null && priceVal != null && qtyVal > 0 && priceVal > 0
+    ? qtyVal * priceVal
+    : null
 
   const byPlatform = useMemo(() => {
     const out: {
@@ -313,14 +318,13 @@ export default function Investments() {
                 </div>
                 {a.price_source === 'manual' && (
                   <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-                    <input
-                      className="input"
-                      inputMode="decimal"
-                      placeholder={`Harga per ${a.unit} hari ini (Rp)`}
-                      value={manual[a.id] ?? ''}
-                      onChange={(e) => setManual((m) => ({ ...m, [a.id]: e.target.value }))}
-                      style={{ flex: 1 }}
-                    />
+                    <div style={{ flex: 1 }}>
+                      <MoneyInput
+                        value={manualVal[a.id] ?? null}
+                        onValueChange={(v) => setManualVal((m) => ({ ...m, [a.id]: v }))}
+                        placeholder={`Harga per ${a.unit}`}
+                      />
+                    </div>
                     <button className="btn" type="button" onClick={() => saveManual(a.id)}>
                       Simpan
                     </button>
@@ -613,13 +617,12 @@ export default function Investments() {
           </Field>
 
           <Field label={`Jumlah didapat (${asset?.unit ?? 'unit'})`} htmlFor="inv-qty">
-            <input
+            <QuantityInput
               id="inv-qty"
-              className="input"
-              inputMode="decimal"
-              placeholder="0.00012345"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
+              value={qtyVal}
+              onValueChange={setQtyVal}
+              maxDecimals={maxDecimals}
+              placeholder="0,00012345"
             />
           </Field>
 
@@ -627,14 +630,17 @@ export default function Investments() {
             label={mode === 'total' ? 'Total yang dibayar (Rp)' : 'Harga per unit (Rp)'}
             htmlFor="inv-px"
           >
-            <input
+            <MoneyInput
               id="inv-px"
-              className="input"
-              inputMode="decimal"
+              value={priceVal}
+              onValueChange={setPriceVal}
               placeholder={mode === 'total' ? '500.000' : '800.000.000'}
-              value={priceIn}
-              onChange={(e) => setPriceIn(e.target.value)}
             />
+            {unitTotal != null && (
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Total: {idr(unitTotal)}
+              </p>
+            )}
             <button
               type="button"
               style={{
@@ -648,20 +654,18 @@ export default function Investments() {
                 textDecoration: 'underline',
                 fontFamily: 'inherit',
               }}
-              onClick={() => setMode(mode === 'total' ? 'unit' : 'total')}
+              onClick={() => { setMode(mode === 'total' ? 'unit' : 'total'); setPriceVal(null) }}
             >
               {mode === 'total' ? 'Isi harga per unit saja' : 'Isi total Rp saja'}
             </button>
           </Field>
 
           <Field label="Biaya / fee (Rp, opsional)" htmlFor="inv-fee">
-            <input
+            <MoneyInput
               id="inv-fee"
-              className="input"
-              inputMode="decimal"
+              value={feeVal}
+              onValueChange={setFeeVal}
               placeholder="0"
-              value={fee}
-              onChange={(e) => setFee(e.target.value)}
             />
           </Field>
 

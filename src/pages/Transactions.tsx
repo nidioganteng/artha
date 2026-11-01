@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../lib/store'
-import { dateLabel, monthKey, monthLabel, parseNum, shiftMonth, todayISO } from '../lib/format'
+import { dateLabel, monthKey, monthLabel, shiftMonth, todayISO } from '../lib/format'
 import { formatShort } from '../lib/amount'
-import { Sheet, EmptyState, Field } from '../ui'
+import { Sheet, EmptyState, Field, MoneyInput } from '../ui'
 import type { Kind } from '../lib/types'
 
 type Filter = Kind | 'all'
@@ -16,7 +16,7 @@ export default function Transactions() {
 
   // Form state
   const [kind, setKind] = useState<Kind>('expense')
-  const [amount, setAmount] = useState('')
+  const [amountVal, setAmountVal] = useState<number | null>(null)
   const [categoryId, setCategoryId] = useState('')
   const [accountId, setAccountId] = useState(() => db.accounts[0]?.id ?? '')
   const effectiveAccountId =
@@ -52,7 +52,7 @@ export default function Transactions() {
 
   function openAdd() {
     setDate(todayISO())
-    setAmount('')
+    setAmountVal(null)
     setNote('')
     setCategoryId('')
     setFormError('')
@@ -61,15 +61,14 @@ export default function Transactions() {
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    const n = parseNum(amount)
-    if (!Number.isFinite(n) || n <= 0) {
+    if (amountVal == null || amountVal <= 0) {
       setFormError('Nominal harus lebih dari 0.')
       return
     }
     setFormError('')
     save('transactions', {
       kind,
-      amount: n,
+      amount: amountVal,
       category_id: categoryId || null,
       account_id: effectiveAccountId || null,
       occurred_on: date,
@@ -356,15 +355,8 @@ export default function Transactions() {
             })}
           </div>
 
-          <Field label="Nominal (Rp)" htmlFor="tx-amt" error={formError}>
-            <input
-              id="tx-amt"
-              className="input"
-              inputMode="decimal"
-              placeholder="50.000"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
+          <Field label="Nominal" htmlFor="tx-amt" error={formError}>
+            <MoneyInput id="tx-amt" value={amountVal} onValueChange={setAmountVal} />
           </Field>
 
           <Field label="Kategori" htmlFor="tx-cat">
