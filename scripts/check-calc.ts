@@ -1,6 +1,7 @@
 // Uji cepat kalkulasi investasi + fungsi murni format. Jalankan: npm run check:calc
 import { computePosition, flowsOf, summarize, xirr } from '../src/lib/calc'
 import { parseNum, todayISO } from '../src/lib/format'
+import { formatMoneyInput, parseMoneyInput, formatQuantityInput, parseQuantityInput } from '../src/lib/numInput'
 
 let failed = 0
 function ok(name: string, cond: boolean, detail = '') {
@@ -86,6 +87,8 @@ ok('parseNum "1.500.000"', pn('1.500.000') === 1_500_000)
 ok('parseNum "0,0025"', pn('0,0025') === 0.0025)
 ok('parseNum "0.0025" (desimal)', pn('0.0025') === 0.0025)
 ok('parseNum "0.0025" dotIsDecimal', pn('0.0025', true) === 0.0025)
+ok('parseNum "500,000" (ribuan koma)', pn('500,000') === 500_000)
+ok('parseNum "1,500,000"', pn('1,500,000') === 1_500_000)
 ok('parseNum "" = NaN', isNaN(pn('')))
 ok('parseNum "-500"', pn('-500') === -500)
 ok('parseNum "0"', pn('0') === 0)
@@ -107,6 +110,41 @@ ok('Rutin tgl 31 di Jan 2025', dueDate('2025-01', 31) === '2025-01-31')
 const now = new Date()
 const localStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
 ok('todayISO zona waktu lokal', todayISO() === localStr)
+
+// 11) formatMoneyInput — format input Rupiah
+ok('fmt money "50000" -> "50.000"', formatMoneyInput('50000') === '50.000')
+ok('fmt money "1234567" -> "1.234.567"', formatMoneyInput('1234567') === '1.234.567')
+ok('fmt money "0" -> "0"', formatMoneyInput('0') === '0')
+ok('fmt money "007" -> "7"', formatMoneyInput('007') === '7')
+ok('fmt money "" -> ""', formatMoneyInput('') === '')
+ok('fmt money "abc" -> ""', formatMoneyInput('abc') === '')
+ok('fmt money "Rp 1.500.000" -> "1.500.000"', formatMoneyInput('Rp 1.500.000') === '1.500.000')
+ok('fmt money "1,500,000" -> "1.500.000"', formatMoneyInput('1,500,000') === '1.500.000')
+
+// 12) parseMoneyInput — parse input Rupiah
+ok('parse money "50.000" -> 50000', parseMoneyInput('50.000') === 50000)
+ok('parse money "" -> null', parseMoneyInput('') === null)
+ok('parse money "1.234.567" -> 1234567', parseMoneyInput('1.234.567') === 1234567)
+ok('parse money "0" -> 0', parseMoneyInput('0') === 0)
+
+// 13) formatQuantityInput — format input kuantitas
+ok('fmt qty "0.5" -> "0,5"', formatQuantityInput('0.5') === '0,5')
+ok('fmt qty "0,5" -> "0,5"', formatQuantityInput('0,5') === '0,5')
+ok('fmt qty "1,2,3" -> "1,23"', formatQuantityInput('1,2,3') === '1,23')
+ok('fmt qty "007,5" -> "7,5"', formatQuantityInput('007,5') === '7,5')
+ok('fmt qty "0,123456789" max8 -> "0,12345678"', formatQuantityInput('0,123456789', 8) === '0,12345678')
+ok('fmt qty "0,1234" max4 -> "0,1234"', formatQuantityInput('0,1234', 4) === '0,1234')
+ok('fmt qty "abc" -> "0"', formatQuantityInput('abc') === '0')
+
+// 14) parseQuantityInput — parse input kuantitas
+ok('parse qty "0,5" -> 0.5', parseQuantityInput('0,5') === 0.5)
+ok('parse qty "" -> null', parseQuantityInput('') === null)
+ok('parse qty "0,00012345" -> 0.00012345', parseQuantityInput('0,00012345') === 0.00012345)
+ok('parse qty "7" -> 7', parseQuantityInput('7') === 7)
+
+// 15) Round trip
+ok('round trip money 1500000', parseMoneyInput(formatMoneyInput('1500000')) === 1500000)
+ok('round trip qty 0.00012345', parseQuantityInput(formatQuantityInput('0.00012345', 8)) === 0.00012345)
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
 process.exit(failed === 0 ? 0 : 1)
