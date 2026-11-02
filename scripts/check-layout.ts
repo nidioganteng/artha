@@ -438,6 +438,64 @@ async function runPlaywright() {
       await p.close()
     }
 
+    // Dashboard: grid baru — Saldo+Donut berdampingan, Bar selebar penuh
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 1440, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const gr = await p.evaluate(`(function() {
+        var bal  = document.querySelector('[data-testid="card-balance"]');
+        var don  = document.querySelector('[data-testid="card-donut"]');
+        var bar  = document.querySelector('[data-testid="card-bar"]');
+        if (!bal || !don || !bar) return { ok: false, detail: 'elemen tidak ditemukan: bal=' + !!bal + ' don=' + !!don + ' bar=' + !!bar };
+        var br = bal.getBoundingClientRect();
+        var dr = don.getBoundingClientRect();
+        var barr = bar.getBoundingClientRect();
+        var sameTop   = Math.abs(br.top - dr.top) < 2;
+        var sameHeight = Math.abs(br.height - dr.height) < 2;
+        var barBelow  = barr.top >= dr.bottom - 2;
+        var barLeftOk  = Math.abs(barr.left - br.left) < 2;
+        var barRightOk = Math.abs(barr.right - dr.right) < 2;
+        var ok = sameTop && sameHeight && barBelow && barLeftOk && barRightOk;
+        return { ok: ok, sameTop: sameTop, sameH: sameHeight, barBelow: barBelow, barL: barLeftOk, barR: barRightOk,
+          detail: 'topDiff=' + Math.round(Math.abs(br.top-dr.top)*10)/10 + ' hDiff=' + Math.round(Math.abs(br.height-dr.height)*10)/10 + ' barLeft=' + Math.round(barr.left) + ' balLeft=' + Math.round(br.left) };
+      })()`) as { ok: boolean; sameTop: boolean; sameH: boolean; barBelow: boolean; barL: boolean; barR: boolean; detail: string }
+
+      check('Dashboard 1440px: Saldo+Donut baris sama (top < 2px)', gr.sameTop, gr.detail)
+      check('Dashboard 1440px: Saldo dan Donut tinggi sama (< 2px)', gr.sameH, gr.detail)
+      check('Dashboard 1440px: Bar di bawah Saldo+Donut', gr.barBelow, gr.detail)
+      check('Dashboard 1440px: Bar melebar dari kiri Saldo ke kanan Donut', gr.barL && gr.barR, gr.detail)
+      await p.close()
+    }
+
+    // Dashboard 390px: Saldo → Donut → Bar bertumpuk berurutan
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 390, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const st = await p.evaluate(`(function() {
+        var bal  = document.querySelector('[data-testid="card-balance"]');
+        var don  = document.querySelector('[data-testid="card-donut"]');
+        var bar  = document.querySelector('[data-testid="card-bar"]');
+        if (!bal || !don || !bar) return { ok: false, detail: 'elemen tidak ditemukan' };
+        var br = bal.getBoundingClientRect();
+        var dr = don.getBoundingClientRect();
+        var barr = bar.getBoundingClientRect();
+        var order = br.top < dr.top && dr.top < barr.top;
+        var noOverflow = barr.right <= 390 + 1;
+        return { ok: order && noOverflow, detail: 'bal.top=' + Math.round(br.top) + ' don.top=' + Math.round(dr.top) + ' bar.top=' + Math.round(barr.top) + ' bar.right=' + Math.round(barr.right) };
+      })()`) as { ok: boolean; detail: string }
+
+      check('Dashboard 390px: Saldo → Donut → Bar bertumpuk berurutan', st.ok, st.detail)
+      await p.close()
+    }
+
     // Dashboard: urutan kartu — hero di atas KPI Pemasukan (DOM dan visual)
     for (const w of [390, 1440]) {
       const p = await browser.newPage()
