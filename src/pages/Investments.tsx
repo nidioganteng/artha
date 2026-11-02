@@ -343,6 +343,17 @@ export default function Investments() {
         />
       ) : (
         <>
+          {/* Grafik perkembangan — di atas ringkasan */}
+          <div style={{ marginBottom: 16 }}>
+            <InvestmentChart
+              trades={db.trades}
+              assets={db.assets}
+              priceHistory={db.price_snapshots}
+              currentPrices={prices}
+              live={live}
+            />
+          </div>
+
           {/* Ringkasan total */}
           <div className="card" style={{ marginBottom: 16 }}>
             <div
