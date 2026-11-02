@@ -120,6 +120,10 @@ function DonutChart({ cats }: { cats: [string, number][] }) {
     return { name, v, d, color: CAT_TOKENS[i % CAT_TOKENS.length] }
   })
 
+  // Font size adaptif: muat dalam lingkaran dalam (radius ~41 unit SVG)
+  const centerText = formatShort(total)
+  const centerFs = centerText.length <= 8 ? 13 : centerText.length <= 11 ? 11 : 9
+
   return (
     <svg
       viewBox="0 0 160 160"
@@ -129,62 +133,100 @@ function DonutChart({ cats }: { cats: [string, number][] }) {
       {slices.map((s) => (
         <path key={s.name} d={s.d} fill="none" stroke={s.color} strokeWidth={sw} strokeLinecap="butt" />
       ))}
-      <text x={cx} y={cy - 6} textAnchor="middle" style={{ fontSize: '11px', fill: 'var(--text-3)' }}>
+      <text x={cx} y={cy - 6} textAnchor="middle" style={{ fontSize: '10px', fill: 'var(--text-3)' }}>
         Total
       </text>
       <text
         x={cx}
-        y={cy + 10}
+        y={cy + 9}
         textAnchor="middle"
-        style={{ fontSize: '13px', fontWeight: '600', fill: 'var(--text-1)', fontFamily: 'var(--font-mono)' }}
+        style={{ fontSize: `${centerFs}px`, fontWeight: '600', fill: 'var(--text-1)', fontFamily: 'var(--font-mono)' }}
       >
-        {formatShort(total)}
+        {centerText}
       </text>
     </svg>
   )
 }
 
 // ──────────────────────────────────────────────────────
-// Bar Chart — income vs expense, 6 months
+// Bar Chart — income vs expense, 6 months (full-width)
 // ──────────────────────────────────────────────────────
 function BarChart({ data }: { data: { month: string; income: number; expense: number }[] }) {
+  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null)
   const maxV = Math.max(...data.flatMap((d) => [d.income, d.expense]), 1)
-  const W = 320, H = 128, padB = 20, barW = 16, gap = 4
+  const W = 600, H = 248, padB = 32, padT = 36, barW = 24, barGap = 8
+  const groupW = barW * 2 + barGap
   const slot = W / data.length
+  const maxDataH = H - padB - padT
 
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
-      style={{ width: '100%', height: 128 }}
+      style={{ width: '100%', height: 248, display: 'block' }}
       role="img"
       aria-label="Grafik pemasukan dan pengeluaran 6 bulan terakhir"
+      onPointerLeave={() => setTip(null)}
     >
       <title>Pemasukan vs pengeluaran</title>
+
+      {/* Legend */}
+      <g>
+        <rect x={4} y={10} width={10} height={10} rx={2} style={{ fill: 'var(--income)' }} />
+        <text x={18} y={19} style={{ fontSize: '10px', fill: 'var(--text-3)' }}>Pemasukan</text>
+        <rect x={110} y={10} width={10} height={10} rx={2} style={{ fill: 'var(--expense)' }} />
+        <text x={124} y={19} style={{ fontSize: '10px', fill: 'var(--text-3)' }}>Pengeluaran</text>
+      </g>
+
       {data.map((d, i) => {
-        const groupW = barW * 2 + gap
         const x0 = slot * i + (slot - groupW) / 2
-        const incH = Math.max(2, (d.income / maxV) * (H - padB - 8))
-        const expH = Math.max(2, (d.expense / maxV) * (H - padB - 8))
+        const incH = Math.max(2, (d.income / maxV) * maxDataH)
+        const expH = Math.max(2, (d.expense / maxV) * maxDataH)
         const lbl = new Intl.DateTimeFormat('id-ID', { month: 'short' })
           .format(new Date(parseInt(d.month.slice(0, 4)), parseInt(d.month.slice(5)) - 1, 1))
           .slice(0, 3)
         return (
           <g key={d.month}>
-            <rect x={x0} y={H - padB - incH} width={barW} height={incH} rx={3} style={{ fill: 'var(--income)' }} opacity={0.9} />
-            <rect x={x0 + barW + gap} y={H - padB - expH} width={barW} height={expH} rx={3} style={{ fill: 'var(--expense)' }} opacity={0.9} />
-            <text x={x0 + groupW / 2} y={H - 4} textAnchor="middle" style={{ fontSize: '9px', fill: 'var(--text-3)' }}>
+            <rect
+              x={x0} y={H - padB - incH} width={barW} height={incH} rx={3}
+              style={{ fill: 'var(--income)', cursor: 'default' }} opacity={0.9}
+              onPointerEnter={() => setTip({ x: x0 + barW / 2, y: H - padB - incH - 6, text: idr(d.income) })}
+            >
+              <title>Pemasukan: {idr(d.income)}</title>
+            </rect>
+            <rect
+              x={x0 + barW + barGap} y={H - padB - expH} width={barW} height={expH} rx={3}
+              style={{ fill: 'var(--expense)', cursor: 'default' }} opacity={0.9}
+              onPointerEnter={() => setTip({ x: x0 + barW + barGap + barW / 2, y: H - padB - expH - 6, text: idr(d.expense) })}
+            >
+              <title>Pengeluaran: {idr(d.expense)}</title>
+            </rect>
+            <text
+              x={x0 + groupW / 2} y={H - 10}
+              textAnchor="middle"
+              style={{ fontSize: '9px', fill: 'var(--text-3)' }}
+            >
               {lbl}
             </text>
           </g>
         )
       })}
-      <g>
-        <rect x={4} y={6} width={8} height={8} rx={2} style={{ fill: 'var(--income)' }} />
-        <text x={16} y={14} style={{ fontSize: '9px', fill: 'var(--text-3)' }}>Masuk</text>
-        <rect x={60} y={6} width={8} height={8} rx={2} style={{ fill: 'var(--expense)' }} />
-        <text x={72} y={14} style={{ fontSize: '9px', fill: 'var(--text-3)' }}>Keluar</text>
-      </g>
+
+      {/* Tooltip SVG overlay */}
+      {tip && (() => {
+        const tw = 96, th = 18, tx = Math.min(Math.max(tip.x - tw / 2, 4), W - tw - 4)
+        const ty = Math.max(tip.y - th, padT)
+        return (
+          <g pointerEvents="none">
+            <rect x={tx} y={ty} width={tw} height={th} rx={3}
+              style={{ fill: 'var(--surface-2)', stroke: 'var(--border)' }} />
+            <text x={tx + tw / 2} y={ty + 12} textAnchor="middle"
+              style={{ fontSize: '9px', fill: 'var(--text-1)', fontFamily: 'var(--font-mono)' }}>
+              {tip.text}
+            </text>
+          </g>
+        )
+      })()}
     </svg>
   )
 }
@@ -741,7 +783,7 @@ function BalanceCard({ goto }: { goto: (tab: string) => void }) {
   const topAccounts = [...perAccount].sort((a, b) => b.balance - a.balance).slice(0, 3)
 
   return (
-    <div className="card bento-half" style={{ display: 'flex', flexDirection: 'column' }}>
+    <div className="card bento-pair" data-testid="card-balance" style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
       <div
         style={{
           display: 'flex',
@@ -1010,11 +1052,78 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
           index={3}
         />
 
-        {/* 3. Blok lainnya */}
+        {/* 3. Baris 1 — dua kolom berdampingan di >= 1024px */}
         <BalanceCard goto={goto} />
 
-        {/* Bar chart card */}
-        <div className="card bento-half">
+        {/* Donut chart card */}
+        <div className="card bento-pair" data-testid="card-donut" style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
+            Pengeluaran per Kategori
+          </h2>
+          {m.cats.length === 0 ? (
+            <p className="muted">Belum ada pengeluaran bulan ini.</p>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+                <DonutChart cats={m.cats} />
+                <div style={{ flex: 1, minWidth: 90, overflow: 'hidden' }}>
+                  {m.cats.slice(0, 6).map(([name, v], i) => (
+                    <div
+                      key={name}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}
+                    >
+                      <div
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 2,
+                          background: CAT_TOKENS[i % CAT_TOKENS.length],
+                          flexShrink: 0,
+                        }}
+                      />
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--text-2)',
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0,
+                        }}
+                      >
+                        {name}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 12,
+                          color: 'var(--text-1)',
+                          fontWeight: 500,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {formatShort(v)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {m.cats.length > 6 && (
+                <button
+                  className="btn-ghost"
+                  onClick={() => { window.location.hash = 'lap' }}
+                  style={{ marginTop: 8, padding: '4px 0', fontSize: 12, alignSelf: 'flex-start', minHeight: 'unset' }}
+                >
+                  Lihat semua ({m.cats.length} kategori)
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Baris 2 — grafik batang selebar penuh */}
+        <div className="card bento-full" data-testid="card-bar" style={{ minWidth: 0 }}>
           <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
             Pemasukan vs Pengeluaran
           </h2>
@@ -1022,60 +1131,6 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
             <p className="muted">Belum ada transaksi di 6 bulan terakhir.</p>
           ) : (
             <BarChart data={barData} />
-          )}
-        </div>
-
-        {/* Donut chart card */}
-        <div className="card bento-half">
-          <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
-            Pengeluaran per Kategori
-          </h2>
-          {m.cats.length === 0 ? (
-            <p className="muted">Belum ada pengeluaran bulan ini.</p>
-          ) : (
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <DonutChart cats={m.cats} />
-              <div style={{ flex: 1, minWidth: 100 }}>
-                {m.cats.slice(0, 6).map(([name, v], i) => (
-                  <div
-                    key={name}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}
-                  >
-                    <div
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 2,
-                        background: CAT_TOKENS[i % CAT_TOKENS.length],
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--text-2)',
-                        flex: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {name}
-                    </div>
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        color: 'var(--text-1)',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {formatShort(v)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           )}
         </div>
 

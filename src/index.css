@@ -215,12 +215,16 @@
   .bento-half { grid-column: span 6; }
 }
 
+/* Dua kolom hanya di >= 1024px: Saldo Rekening | Pengeluaran per Kategori */
+.bento-pair { grid-column: span 12; }
+
 @media (min-width: 1024px) {
   .bento-kpi     { grid-column: span 3; }
   .bento-hero    { grid-column: span 8; }
   .bento-summary { grid-column: span 4; }
   .bento-half    { grid-column: span 6; }
   .bento-full    { grid-column: span 12; }
+  .bento-pair    { grid-column: span 6; }
 }
 
 /* ──────────────────────────────────────────────────────
