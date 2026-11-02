@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   TrendingUp,
   RefreshCw,
+  BarChart2,
   Settings as SettingsIcon,
   Sun,
   Moon,
@@ -21,8 +22,10 @@ import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import Investments from './pages/Investments'
 import Recurring from './pages/Recurring'
+import Report from './pages/Report'
 import Settings from './pages/Settings'
 
+// Tabs di bottom tab bar (mobile) — tidak termasuk Laporan.
 const TABS = [
   { id: 'home', label: 'Ringkasan',  Icon: LayoutDashboard },
   { id: 'tx',   label: 'Transaksi',  Icon: ArrowLeftRight },
@@ -30,11 +33,22 @@ const TABS = [
   { id: 'rec',  label: 'Rutin',      Icon: RefreshCw },
   { id: 'set',  label: 'Pengaturan', Icon: SettingsIcon },
 ] as const
-type Tab = (typeof TABS)[number]['id']
+
+// Semua tab termasuk Laporan — hanya muncul di sidebar/rail (>= md).
+const SIDE_TABS = [
+  { id: 'home', label: 'Ringkasan',  Icon: LayoutDashboard },
+  { id: 'tx',   label: 'Transaksi',  Icon: ArrowLeftRight },
+  { id: 'inv',  label: 'Investasi',  Icon: TrendingUp },
+  { id: 'rec',  label: 'Rutin',      Icon: RefreshCw },
+  { id: 'lap',  label: 'Laporan',    Icon: BarChart2 },
+  { id: 'set',  label: 'Pengaturan', Icon: SettingsIcon },
+] as const
+
+type Tab = (typeof SIDE_TABS)[number]['id']
 
 function tabFromHash(): Tab {
   const h = window.location.hash.replace('#', '')
-  return (TABS.find((t) => t.id === h)?.id ?? 'home') as Tab
+  return (SIDE_TABS.find((t) => t.id === h)?.id ?? 'home') as Tab
 }
 
 function ModeToggle() {
@@ -153,7 +167,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
             transition: 'background-color 0.25s ease',
           }}
         >
-          {TABS.map(({ id, label, Icon }) => {
+          {SIDE_TABS.map(({ id, label, Icon }) => {
             const active = tab === id
             return (
               <button
@@ -245,6 +259,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
                 {tab === 'tx' && <Transactions />}
                 {tab === 'inv' && <Investments />}
                 {tab === 'rec' && <Recurring />}
+                {tab === 'lap' && <Report />}
                 {tab === 'set' && <Settings onLogout={onLogout} focusFailed={focusFailed} />}
               </m.div>
             </AnimatePresence>

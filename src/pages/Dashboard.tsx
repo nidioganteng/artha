@@ -5,7 +5,8 @@ import { useStore } from '../lib/store'
 import { usePortfolio } from '../lib/usePortfolio'
 import { idr, monthKey, monthLabel, pct, shiftMonth, todayISO, dateLabel } from '../lib/format'
 import { formatShort } from '../lib/amount'
-import { monthReport } from '../lib/ledger'
+import { accountBalance, monthReport, unassignedTrades } from '../lib/ledger'
+import { AlertTriangle } from 'lucide-react'
 
 // ──────────────────────────────────────────────────────
 // Hook: count-up
@@ -714,6 +715,124 @@ function RecurringDue({ month, goto }: { month: string; goto: (tab: string) => v
 }
 
 // ──────────────────────────────────────────────────────
+// Balance Card — total saldo rekening + peringatan trade belum ditentukan
+// ──────────────────────────────────────────────────────
+function BalanceCard({ goto }: { goto: (tab: string) => void }) {
+  const { db } = useStore()
+
+  const { total, perAccount, unassigned } = useMemo(() => {
+    const perAccount = db.accounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      balance: accountBalance(a, db.transactions, db.trades),
+    }))
+    const total = perAccount.reduce((s, a) => s + a.balance, 0)
+    const unassigned = unassignedTrades(db.trades)
+    return { total, perAccount, unassigned }
+  }, [db.accounts, db.transactions, db.trades])
+
+  const topAccounts = [...perAccount].sort((a, b) => b.balance - a.balance).slice(0, 3)
+
+  return (
+    <div className="card bento-half" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 10,
+        }}
+      >
+        <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)' }}>Saldo Rekening</h2>
+        <button
+          className="btn-ghost"
+          onClick={() => {
+            window.location.hash = 'lap'
+          }}
+          style={{ padding: '6px 12px', minHeight: 36, fontSize: 13 }}
+        >
+          Lihat laporan
+        </button>
+      </div>
+      {db.accounts.length === 0 ? (
+        <p className="muted">Belum ada rekening. Tambahkan di Pengaturan.</p>
+      ) : (
+        <>
+          <div style={{ marginBottom: 10 }}>
+            <div className="muted" style={{ fontSize: 12 }}>Total saldo</div>
+            <div className="num-lg" style={{ color: 'var(--text-1)', marginTop: 2 }}>
+              {formatShort(total)}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            {topAccounts.map((a) => (
+              <div
+                key={a.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  minWidth: 0,
+                  alignItems: 'baseline',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--text-2)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    minWidth: 0,
+                    flex: 1,
+                  }}
+                >
+                  {a.name}
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: a.balance < 0 ? 'var(--expense)' : 'var(--text-1)',
+                    flexShrink: 0,
+                  }}
+                >
+                  {formatShort(a.balance)}
+                </span>
+              </div>
+            ))}
+            {perAccount.length > topAccounts.length && (
+              <div className="muted" style={{ fontSize: 12 }}>
+                +{perAccount.length - topAccounts.length} rekening lainnya
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      {unassigned.trades.length > 0 && (
+        <button
+          type="button"
+          className="chip chip-warn"
+          onClick={() => goto('inv')}
+          style={{
+            marginTop: 12,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+            alignSelf: 'flex-start',
+          }}
+        >
+          <AlertTriangle size={14} />
+          {unassigned.trades.length} catatan investasi belum ditentukan sumber dananya ({formatShort(unassigned.totalValue)})
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────
 // Dashboard
 // ──────────────────────────────────────────────────────
 export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
@@ -947,6 +1066,8 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
             </div>
           )}
         </div>
+
+        <BalanceCard goto={goto} />
 
         <RecentTx goto={goto} />
 
