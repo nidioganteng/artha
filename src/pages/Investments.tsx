@@ -331,6 +331,17 @@ export default function Investments() {
         {at ? ` Diperbarui ${new Date(at).toLocaleString('id-ID')}.` : ''}
       </p>
 
+      {/* Grafik perkembangan — selalu ditampilkan (punya empty state sendiri) */}
+      <div style={{ marginBottom: 16 }}>
+        <InvestmentChart
+          trades={db.trades}
+          assets={db.assets}
+          priceHistory={db.price_snapshots}
+          currentPrices={prices}
+          live={live}
+        />
+      </div>
+
       {rows.length === 0 ? (
         <EmptyState
           title="Belum ada aset"
@@ -343,17 +354,6 @@ export default function Investments() {
         />
       ) : (
         <>
-          {/* Grafik perkembangan — di atas ringkasan */}
-          <div style={{ marginBottom: 16 }}>
-            <InvestmentChart
-              trades={db.trades}
-              assets={db.assets}
-              priceHistory={db.price_snapshots}
-              currentPrices={prices}
-              live={live}
-            />
-          </div>
-
           {/* Ringkasan total */}
           <div className="card" style={{ marginBottom: 16 }}>
             <div

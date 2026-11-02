@@ -281,5 +281,34 @@ ok('trade dari server lama (tanpa account_id) tetap muncul di UI', (() => {
   return db.trades.length === 1
 })())
 
+// ── price_snapshots (tabel baru untuk grafik perkembangan investasi) ─────────
+{
+  // Upsert snapshot menambah baris
+  const op1: Op = ups('price_snapshots', row('ps1', {
+    asset_id: 'a1', date: '2026-10-01', price: 1_000_000_000, source: 'live',
+  }))
+  const db1 = applyOps(emptyDB(), [op1])
+  ok('price_snapshots: upsert menambah baris', db1.price_snapshots.length === 1)
+
+  // Upsert id sama = update, bukan duplikat (idempotent lewat getOrCreateSnapshotId)
+  const op2: Op = ups('price_snapshots', row('ps1', {
+    asset_id: 'a1', date: '2026-10-01', price: 1_050_000_000, source: 'live',
+  }))
+  const db2 = applyOps(db1, [op2])
+  ok('price_snapshots: upsert id sama = update (idempotent)',
+    db2.price_snapshots.length === 1 &&
+    (db2.price_snapshots[0] as { price: number }).price === 1_050_000_000)
+
+  // Delete snapshot
+  const db3 = applyOps(db2, [del('price_snapshots', 'ps1')])
+  ok('price_snapshots: delete menghapus baris', db3.price_snapshots.length === 0)
+
+  // Snapshot diblokir oleh asset gagal (price_snapshots.asset_id → assets.id)
+  // Catatan: price_snapshots BELUM terdaftar di FK_FIELDS, jadi tidak diblokir.
+  // Ini sengaja: data snapshot bersifat metadata, bisa dibuang kalau asetnya hilang.
+  ok('price_snapshots: tidak diblokir oleh asset gagal (metadata-only)',
+    !blockedByIds(op1, new Set(['a1'])))
+}
+
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
 process.exit(failed === 0 ? 0 : 1)

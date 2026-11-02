@@ -85,6 +85,9 @@ check('CSS: .sheet-footer terdefinisi', css.includes('.sheet-footer {'))
 // Sheet scrollbar styling
 check('CSS: .sheet-content scrollbar-width thin', css.includes('scrollbar-width: thin'))
 
+// Investments: pakai InvestmentChart
+check('Investments: pakai InvestmentChart', invPage.includes('<InvestmentChart') && invPage.includes("from '../ui/InvestmentChart'"))
+
 // Halaman: form id + tombol footer
 check('Transactions: form id="form-tx"', txPage.includes('id="form-tx"'))
 check('Transactions: tombol form="form-tx"', txPage.includes('form="form-tx"'))
@@ -96,6 +99,15 @@ check('Recurring: tombol form="form-rec"', recPage.includes('form="form-rec"'))
 // Dashboard empty state
 check('Dashboard: empty state tidak memakai num-hero',
   !/num-hero[^<]*Belum ada data|Belum ada data[^<]*num-hero/.test(dash))
+
+// Bar chart: tidak ada preserveAspectRatio="none" + teks SVG di dalamnya
+check('Dashboard: BarChart tidak memakai preserveAspectRatio="none"',
+  !dash.includes('preserveAspectRatio="none"'),
+  'preserveAspectRatio="none" menyebabkan teks meregang non-uniform')
+// Legenda bar chart adalah HTML (bukan elemen SVG <text>/<rect>)
+check('Dashboard: legenda bar chart pakai HTML (data-testid="chart-legend")',
+  dash.includes('data-testid="chart-legend"'),
+  'legenda harus di luar SVG agar tidak terdistorsi')
 
 // Token CSS
 for (const t of ['--z-header','--z-nav','--z-backdrop','--z-sheet','--z-toast'])
@@ -174,6 +186,10 @@ async function runPlaywright() {
           const txt = msg.text()
           // Abaikan warning browser bawaan tentang SW saat preview
           if (/service.worker|insecure|deprecated/i.test(txt)) return
+          // Abaikan 404 aset bawaan preview (ikon dsb) dan warning missing-table
+          // untuk price_snapshots yang memang bisa belum ada sebelum migrasi.
+          if (/Failed to load resource/i.test(txt)) return
+          if (/\[store\] tabel .* belum ada di database/i.test(txt)) return
           consoleErrors.push(`[${msg.type()}] ${txt.slice(0, 120)}`)
         }
       })
@@ -518,6 +534,96 @@ async function runPlaywright() {
 
       check(`Dashboard ${w}px: hero di atas KPI Pemasukan (visual)`, order.topOk, order.detail)
       check(`Dashboard ${w}px: hero sebelum KPI Pemasukan (DOM)`, order.domOk, order.detail)
+      await p.close()
+    }
+
+    // Bar chart: legenda di luar SVG, tidak ada SVG[preserveAspectRatio="none"] dengan teks
+    for (const w of [390, 768, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const cr = await p.evaluate(`(function() {
+        // Legenda harus ada sebagai HTML di luar SVG
+        var legend = document.querySelector('[data-testid="chart-legend"]');
+        var legendIsHtml = legend && legend.tagName.toLowerCase() !== 'g' && legend.tagName.toLowerCase() !== 'svg';
+        var legendNotInSvg = legend && legend.closest('svg') === null;
+        // Tidak boleh ada SVG dengan preserveAspectRatio="none" yang berisi <text>
+        var distortedSvgs = Array.from(document.querySelectorAll('svg[preserveAspectRatio="none"]'));
+        var hasTextInDistorted = distortedSvgs.some(function(svg) { return svg.querySelectorAll('text').length > 0; });
+        // Legenda teks harus terlihat (tidak terpotong)
+        var legendVisible = false;
+        if (legend) {
+          var r = legend.getBoundingClientRect();
+          legendVisible = r.width > 0 && r.height > 0 && r.top >= 0;
+        }
+        return {
+          legendIsHtml: !!legendIsHtml,
+          legendNotInSvg: !!legendNotInSvg,
+          noDistortedText: !hasTextInDistorted,
+          legendVisible: legendVisible,
+          detail: 'legend tag=' + (legend ? legend.tagName : 'null') + ' distortedSvgs=' + distortedSvgs.length + ' hasTextInDistorted=' + hasTextInDistorted
+        };
+      })()`) as { legendIsHtml: boolean; legendNotInSvg: boolean; noDistortedText: boolean; legendVisible: boolean; detail: string }
+
+      check(`BarChart ${w}px: legenda adalah HTML (bukan SVG)`, cr.legendIsHtml, cr.detail)
+      check(`BarChart ${w}px: legenda tidak di dalam SVG`, cr.legendNotInSvg, cr.detail)
+      check(`BarChart ${w}px: tidak ada SVG preserveAspectRatio="none" dengan teks`, cr.noDistortedText, cr.detail)
+      check(`BarChart ${w}px: legenda terlihat`, cr.legendVisible, cr.detail)
+      await p.close()
+    }
+
+    // ── Halaman Investasi: InvestmentChart (#inv) ──
+    for (const w of [360, 390, 768, 1000, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#inv`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(500)
+
+      const r = await p.evaluate(`(function(vw) {
+        var card = document.querySelector('[data-testid="investment-chart"]');
+        var legend = document.querySelector('[data-testid="invest-legend"]');
+        // Legenda hanya ada kalau grafik punya data; dalam preview mode kemungkinan empty state.
+        var legendInSvg = legend ? legend.closest('svg') !== null : false;
+        var distorted = Array.from(document.querySelectorAll('svg[preserveAspectRatio="none"]'));
+        var distortedHasText = distorted.some(function(svg) { return svg.querySelectorAll('text').length > 0; });
+        var hasHorizontalScroll = document.documentElement.scrollWidth > vw + 1;
+        var cardRect = card ? card.getBoundingClientRect() : null;
+        var overflow = cardRect ? cardRect.right > vw + 1 : false;
+        // Judul harus muncul di dalam kartu (baik empty state maupun grafik)
+        var titleOk = false;
+        if (card) {
+          var h2 = card.querySelector('h2');
+          titleOk = h2 && h2.textContent && h2.textContent.indexOf('Perkembangan Investasi') >= 0;
+        }
+        return {
+          cardVisible: !!card,
+          titleOk: !!titleOk,
+          legendNotInSvg: !legendInSvg,
+          noDistortedText: !distortedHasText,
+          noHorizontalScroll: !hasHorizontalScroll,
+          noCardOverflow: !overflow,
+          detail: 'card=' + !!card + ' title=' + !!titleOk + ' legend=' + !!legend + ' legendInSvg=' + legendInSvg + ' distorted=' + distorted.length + ' hScroll=' + hasHorizontalScroll + ' cardOverflow=' + overflow
+        };
+      })(${w})`) as {
+        cardVisible: boolean
+        titleOk: boolean
+        legendNotInSvg: boolean
+        noDistortedText: boolean
+        noHorizontalScroll: boolean
+        noCardOverflow: boolean
+        detail: string
+      }
+
+      check(`InvestChart ${w}px: kartu "Perkembangan Investasi" tampil`, r.cardVisible, r.detail)
+      check(`InvestChart ${w}px: judul kartu muncul`, r.titleOk, r.detail)
+      check(`InvestChart ${w}px: legenda (jika ada) bukan di dalam SVG`, r.legendNotInSvg, r.detail)
+      check(`InvestChart ${w}px: tidak ada SVG preserveAspectRatio="none" dengan teks`, r.noDistortedText, r.detail)
+      check(`InvestChart ${w}px: tidak ada horizontal scroll`, r.noHorizontalScroll, r.detail)
+      check(`InvestChart ${w}px: kartu tidak overflow`, r.noCardOverflow, r.detail)
       await p.close()
     }
 
