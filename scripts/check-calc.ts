@@ -1,6 +1,6 @@
 // Uji cepat kalkulasi investasi + fungsi murni format. Jalankan: npm run check:calc
 import { computePosition, flowsOf, summarize, xirr } from '../src/lib/calc'
-import { parseNum, todayISO } from '../src/lib/format'
+import { formatPercent, parseNum, todayISO } from '../src/lib/format'
 import { formatMoneyInput, parseMoneyInput, formatQuantityInput, parseQuantityInput } from '../src/lib/numInput'
 import { formatShort } from '../src/lib/amount'
 import { accountBalance, monthReport, unassignedTrades } from '../src/lib/ledger'
@@ -242,6 +242,13 @@ ok('formatShort -1500000 negatif aman', formatShort(-1500000) === '-Rp 1,5 Jt')
   ok('unassignedTrades: jumlah', u.trades.length === 1)
   ok('unassignedTrades: totalValue', u.totalValue === 0.001 * 500_000_000 + 1_000)
 }
+
+// 19) formatPercent — koma desimal Indonesia, tanpa + untuk positif
+ok('formatPercent 0 -> "0,00%"', formatPercent(0) === '0,00%')
+ok('formatPercent 0.125 -> "12,50%"', formatPercent(0.125) === '12,50%')
+ok('formatPercent -0.0325 -> "-3,25%"', formatPercent(-0.0325) === '-3,25%')
+ok('formatPercent null -> "-"', formatPercent(null) === '-')
+ok('formatPercent negatif besar aman', formatPercent(-1) === '-100,00%')
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
 process.exit(failed === 0 ? 0 : 1)

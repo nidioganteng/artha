@@ -438,6 +438,31 @@ async function runPlaywright() {
       await p.close()
     }
 
+    // Dashboard: urutan kartu — hero di atas KPI Pemasukan (DOM dan visual)
+    for (const w of [390, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const order = await p.evaluate(`(function() {
+        var hero = document.querySelector('[data-testid="dashboard-hero"]');
+        var kpi  = document.querySelector('[data-testid="kpi-pemasukan"]');
+        if (!hero || !kpi) return { topOk: false, domOk: false, detail: 'elemen tidak ditemukan: hero=' + !!hero + ' kpi=' + !!kpi };
+        var hr = hero.getBoundingClientRect();
+        var kr = kpi.getBoundingClientRect();
+        var topOk = hr.top < kr.top;
+        var all = Array.from(document.querySelectorAll('[data-testid="dashboard-hero"], [data-testid="kpi-pemasukan"]'));
+        var domOk = all.length >= 2 && all[0] === hero;
+        return { topOk: topOk, domOk: domOk, detail: 'hero.top=' + Math.round(hr.top) + ' kpi.top=' + Math.round(kr.top) };
+      })()`) as { topOk: boolean; domOk: boolean; detail: string }
+
+      check(`Dashboard ${w}px: hero di atas KPI Pemasukan (visual)`, order.topOk, order.detail)
+      check(`Dashboard ${w}px: hero sebelum KPI Pemasukan (DOM)`, order.domOk, order.detail)
+      await p.close()
+    }
+
     // Tangkapan layar
     mkdirSync(QA_DIR, { recursive: true })
     console.log(`\n  Mengambil tangkapan layar ke docs/qa/verify/...`)
