@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { m, useReducedMotion } from 'motion/react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../lib/store'
@@ -7,6 +7,7 @@ import { formatPercent, idr, monthKey, monthLabel, shiftMonth, todayISO, dateLab
 import { formatShort } from '../lib/amount'
 import { accountBalance, monthReport, unassignedTrades } from '../lib/ledger'
 import { AlertTriangle } from 'lucide-react'
+import { useContainerWidth } from '../lib/useContainerWidth'
 
 // ──────────────────────────────────────────────────────
 // Hook: count-up
@@ -152,82 +153,120 @@ function DonutChart({ cats }: { cats: [string, number][] }) {
 // Bar Chart — income vs expense, 6 months (full-width)
 // ──────────────────────────────────────────────────────
 function BarChart({ data }: { data: { month: string; income: number; expense: number }[] }) {
-  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [tip, setTip] = useState<{ px: number; py: number; text: string } | null>(null)
+  const divRef = useRef<HTMLDivElement | null>(null)
+  const [W, widthRef] = useContainerWidth()
+  const wrapRef = useCallback((el: HTMLDivElement | null) => {
+    divRef.current = el
+    widthRef(el)
+  }, [widthRef])
+  const H = 220, padB = 32, padT = 8, barGap = 6
   const maxV = Math.max(...data.flatMap((d) => [d.income, d.expense]), 1)
-  const W = 600, H = 248, padB = 32, padT = 36, barW = 24, barGap = 8
+  const slot = W > 0 ? W / data.length : 0
+  const barW = Math.min(28, slot * 0.28)
+  const rx = Math.min(4, barW / 2)
   const groupW = barW * 2 + barGap
-  const slot = W / data.length
   const maxDataH = H - padB - padT
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      style={{ width: '100%', height: 248, display: 'block' }}
-      role="img"
-      aria-label="Grafik pemasukan dan pengeluaran 6 bulan terakhir"
-      onPointerLeave={() => setTip(null)}
-    >
-      <title>Pemasukan vs pengeluaran</title>
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
+      {/* HTML legend — never distorted */}
+      <div
+        data-testid="chart-legend"
+        style={{ display: 'flex', gap: 16, marginBottom: 8, fontSize: 12, color: 'var(--text-3)', alignItems: 'center' }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--income)', display: 'inline-block', flexShrink: 0 }} />
+          Pemasukan
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--expense)', display: 'inline-block', flexShrink: 0 }} />
+          Pengeluaran
+        </span>
+      </div>
 
-      {/* Legend */}
-      <g>
-        <rect x={4} y={10} width={10} height={10} rx={2} style={{ fill: 'var(--income)' }} />
-        <text x={18} y={19} style={{ fontSize: '10px', fill: 'var(--text-3)' }}>Pemasukan</text>
-        <rect x={110} y={10} width={10} height={10} rx={2} style={{ fill: 'var(--expense)' }} />
-        <text x={124} y={19} style={{ fontSize: '10px', fill: 'var(--text-3)' }}>Pengeluaran</text>
-      </g>
+      {W > 0 && (
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          width={W}
+          height={H}
+          style={{ display: 'block', width: '100%' }}
+          role="img"
+          aria-label="Grafik pemasukan dan pengeluaran 6 bulan terakhir"
+          onPointerLeave={() => setTip(null)}
+        >
+          <title>Pemasukan vs pengeluaran</title>
 
-      {data.map((d, i) => {
-        const x0 = slot * i + (slot - groupW) / 2
-        const incH = Math.max(2, (d.income / maxV) * maxDataH)
-        const expH = Math.max(2, (d.expense / maxV) * maxDataH)
-        const lbl = new Intl.DateTimeFormat('id-ID', { month: 'short' })
-          .format(new Date(parseInt(d.month.slice(0, 4)), parseInt(d.month.slice(5)) - 1, 1))
-          .slice(0, 3)
-        return (
-          <g key={d.month}>
-            <rect
-              x={x0} y={H - padB - incH} width={barW} height={incH} rx={3}
-              style={{ fill: 'var(--income)', cursor: 'default' }} opacity={0.9}
-              onPointerEnter={() => setTip({ x: x0 + barW / 2, y: H - padB - incH - 6, text: idr(d.income) })}
-            >
-              <title>Pemasukan: {idr(d.income)}</title>
-            </rect>
-            <rect
-              x={x0 + barW + barGap} y={H - padB - expH} width={barW} height={expH} rx={3}
-              style={{ fill: 'var(--expense)', cursor: 'default' }} opacity={0.9}
-              onPointerEnter={() => setTip({ x: x0 + barW + barGap + barW / 2, y: H - padB - expH - 6, text: idr(d.expense) })}
-            >
-              <title>Pengeluaran: {idr(d.expense)}</title>
-            </rect>
-            <text
-              x={x0 + groupW / 2} y={H - 10}
-              textAnchor="middle"
-              style={{ fontSize: '9px', fill: 'var(--text-3)' }}
-            >
-              {lbl}
-            </text>
-          </g>
-        )
-      })}
+          {/* Zero baseline */}
+          <line x1={0} y1={H - padB} x2={W} y2={H - padB} stroke="var(--border)" strokeWidth={1} />
 
-      {/* Tooltip SVG overlay */}
-      {tip && (() => {
-        const tw = 96, th = 18, tx = Math.min(Math.max(tip.x - tw / 2, 4), W - tw - 4)
-        const ty = Math.max(tip.y - th, padT)
-        return (
-          <g pointerEvents="none">
-            <rect x={tx} y={ty} width={tw} height={th} rx={3}
-              style={{ fill: 'var(--surface-2)', stroke: 'var(--border)' }} />
-            <text x={tx + tw / 2} y={ty + 12} textAnchor="middle"
-              style={{ fontSize: '9px', fill: 'var(--text-1)', fontFamily: 'var(--font-mono)' }}>
-              {tip.text}
-            </text>
-          </g>
-        )
-      })()}
-    </svg>
+          {data.map((d, i) => {
+            const x0 = slot * i + (slot - groupW) / 2
+            const incH = Math.max(2, (d.income / maxV) * maxDataH)
+            const expH = Math.max(2, (d.expense / maxV) * maxDataH)
+            const lbl = new Intl.DateTimeFormat('id-ID', { month: 'short' })
+              .format(new Date(parseInt(d.month.slice(0, 4)), parseInt(d.month.slice(5)) - 1, 1))
+              .slice(0, 3)
+            return (
+              <g key={d.month}>
+                <rect
+                  x={x0} y={H - padB - incH} width={barW} height={incH} rx={rx}
+                  style={{ fill: 'var(--income)', cursor: 'default' }} opacity={0.9}
+                  onPointerEnter={(e) => {
+                    const rect = divRef.current?.getBoundingClientRect()
+                    if (rect) setTip({ px: e.clientX - rect.left, py: e.clientY - rect.top, text: idr(d.income) })
+                  }}
+                >
+                  <title>Pemasukan: {idr(d.income)}</title>
+                </rect>
+                <rect
+                  x={x0 + barW + barGap} y={H - padB - expH} width={barW} height={expH} rx={rx}
+                  style={{ fill: 'var(--expense)', cursor: 'default' }} opacity={0.9}
+                  onPointerEnter={(e) => {
+                    const rect = divRef.current?.getBoundingClientRect()
+                    if (rect) setTip({ px: e.clientX - rect.left, py: e.clientY - rect.top, text: idr(d.expense) })
+                  }}
+                >
+                  <title>Pengeluaran: {idr(d.expense)}</title>
+                </rect>
+                <text
+                  x={x0 + groupW / 2} y={H - 10}
+                  textAnchor="middle"
+                  style={{ fontSize: '9px', fill: 'var(--text-3)' }}
+                >
+                  {lbl}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+      )}
+
+      {/* HTML tooltip — sharp at every pixel density */}
+      {tip && (
+        <div
+          role="tooltip"
+          style={{
+            position: 'absolute',
+            left: tip.px,
+            top: tip.py - 32,
+            transform: 'translateX(-50%)',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            borderRadius: 4,
+            padding: '2px 8px',
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-1)',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        >
+          {tip.text}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1127,11 +1166,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
           <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
             Pemasukan vs Pengeluaran
           </h2>
-          {barData.every((d) => d.income === 0 && d.expense === 0) ? (
-            <p className="muted">Belum ada transaksi di 6 bulan terakhir.</p>
-          ) : (
-            <BarChart data={barData} />
-          )}
+          <BarChart data={barData} />
         </div>
 
         <RecentTx goto={goto} />

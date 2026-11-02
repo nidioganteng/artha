@@ -106,6 +106,20 @@ check('InvestmentChart: tepat 1 top-level return di komponen utama (tidak ada ea
   topLevelReturnCount === 1,
   `ditemukan ${topLevelReturnCount} top-level return, harus tepat 1`)
 
+// InvestmentChart: memakai useContainerWidth (callback ref untuk elemen kondisional)
+check('InvestmentChart: import useContainerWidth dari lib/useContainerWidth',
+  invChart.includes("from '../lib/useContainerWidth'") && invChart.includes('useContainerWidth()'),
+  'harus import useContainerWidth; useRef+useEffect([ref]) tidak aman untuk elemen kondisional')
+check('InvestmentChart: tidak ada definisi useElementWidth lokal',
+  !invChart.includes('function useElementWidth'),
+  'hook lama useElementWidth harus dihapus dari InvestmentChart')
+check('InvestmentChart: kontainer grafik punya tinggi tetap (height: H)',
+  invChart.includes('height: H') && invChart.includes('ref={chartElRef}'),
+  'div container chart harus punya height: H agar tidak runtuh jadi 0 saat elemen mount')
+check('InvestmentChart: guard NaN di yFor (Number.isFinite)',
+  invChart.includes('Number.isFinite(y)'),
+  'yFor harus memakai Number.isFinite agar grafik flat line tidak menghasilkan NaN')
+
 // Halaman: form id + tombol footer
 check('Transactions: form id="form-tx"', txPage.includes('id="form-tx"'))
 check('Transactions: tombol form="form-tx"', txPage.includes('form="form-tx"'))
@@ -738,6 +752,46 @@ async function runPlaywright() {
 
       check('InvestChart: localStorage fake asset id → kartu tetap tampil', ls.cardPresent, ls.detail)
       check('InvestChart: localStorage fake asset id → chip "Semua" masih terlihat', ls.semuaVisible, ls.detail)
+      await p.close()
+    }
+
+    // ── InvestmentChart: area grafik tidak pernah tinggi 0, path SVG tanpa NaN ──
+    for (const w of [390, 768, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#inv`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(500)
+
+      const hr = await p.evaluate(`(function() {
+        var card = document.querySelector('[data-testid="investment-chart"]');
+        if (!card) return { heightOk: false, noZeroSvg: true, noNanPath: true, detail: 'kartu tidak ditemukan' };
+        // Kontainer area grafik: div position:relative dengan tinggi ~240px
+        var divs = Array.from(card.querySelectorAll('div'));
+        var areaDiv = null;
+        for (var i = 0; i < divs.length; i++) {
+          var s = window.getComputedStyle(divs[i]);
+          var h = divs[i].getBoundingClientRect().height;
+          if (s.position === 'relative' && h >= 200) { areaDiv = divs[i]; break; }
+        }
+        var containerH = areaDiv ? areaDiv.getBoundingClientRect().height : 0;
+        // SVG non-dekoratif harus punya lebar > 0 bila ada
+        var svgs = Array.from(card.querySelectorAll('svg:not([aria-hidden])'));
+        var zeroWSvgs = svgs.filter(function(sv) { return sv.getBoundingClientRect().width <= 0; });
+        // Path tidak boleh mengandung NaN
+        var paths = Array.from(card.querySelectorAll('svg path[d]'));
+        var nanPaths = paths.filter(function(pth) { return (pth.getAttribute('d') || '').indexOf('NaN') >= 0; });
+        return {
+          heightOk: containerH >= 200,
+          noZeroSvg: zeroWSvgs.length === 0,
+          noNanPath: nanPaths.length === 0,
+          detail: 'containerH=' + Math.round(containerH) + ' zeroSvgs=' + zeroWSvgs.length + ' nanPaths=' + nanPaths.length
+        };
+      })()`) as { heightOk: boolean; noZeroSvg: boolean; noNanPath: boolean; detail: string }
+
+      check(`InvestChart-render ${w}px: area grafik tinggi >= 200px (tidak runtuh)`, hr.heightOk, hr.detail)
+      check(`InvestChart-render ${w}px: tidak ada SVG non-dekoratif dengan lebar 0`, hr.noZeroSvg, hr.detail)
+      check(`InvestChart-render ${w}px: path SVG tidak mengandung NaN`, hr.noNanPath, hr.detail)
       await p.close()
     }
 

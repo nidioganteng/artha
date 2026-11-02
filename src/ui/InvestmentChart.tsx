@@ -3,24 +3,7 @@ import type { Trade, Asset, PriceSnapshot } from '../lib/types'
 import { portfolioSeries, type SeriesPoint } from '../lib/calc'
 import { formatShort } from '../lib/amount'
 import { formatPercent, idr, todayISO } from '../lib/format'
-
-// ──────────────────────────────────────────────────────
-// Hook: lebar kontainer via ResizeObserver (SVG viewBox 1:1)
-// ──────────────────────────────────────────────────────
-function useElementWidth(ref: { current: HTMLDivElement | null }) {
-  const [width, setWidth] = useState(0)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    setWidth(el.getBoundingClientRect().width)
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) setWidth(entry.contentRect.width)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [ref])
-  return width
-}
+import { useContainerWidth } from '../lib/useContainerWidth'
 
 type Period = 6 | 12 | 'all'
 
@@ -106,10 +89,9 @@ function EmptyChartArea({
   height: number
   children: React.ReactNode
 }) {
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const W = useElementWidth(wrapRef)
+  const [W, elRef] = useContainerWidth()
   return (
-    <div ref={wrapRef} style={{ position: 'relative', width: '100%', height }}>
+    <div ref={elRef} style={{ position: 'relative', width: '100%', height }}>
       {W > 0 && (
         <svg
           width={W}
@@ -184,10 +166,12 @@ export function InvestmentChart({
   const [period, setPeriod] = useState<Period>(() => readPeriod())
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const [showTable, setShowTable] = useState(false)
+  const [chartError, setChartError] = useState<string | null>(null)
 
-  const wrapRef = useRef<HTMLDivElement>(null)
+  // Callback ref: aman untuk elemen yang dirender secara kondisional.
+  // useRef + useEffect([ref]) tidak berfungsi bila elemen belum ada saat mount.
+  const [W, chartElRef] = useContainerWidth()
   const svgRef = useRef<SVGSVGElement>(null)
-  const W = useElementWidth(wrapRef)
 
   // Simpan preferensi ke localStorage
   useEffect(() => {
@@ -257,34 +241,58 @@ export function InvestmentChart({
   const padL = 8, padR = 8, padT = 10, padB = 28
   const chartW = Math.max(50, W - padL - padR)
   const chartH = H - padT - padB
-  const maxVal = series.length > 0
-    ? Math.max(1, ...series.map((p) => Math.max(p.value, p.cost))) * 1.08
+
+  // Sumbu Y: bila semua nilai sama (garis datar), beri padding ±10% agar tidak degenerate
+  const rawMax = series.length > 0
+    ? Math.max(...series.map((p) => Math.max(p.value, p.cost)))
+    : 0
+  const rawMin = series.length > 0
+    ? Math.min(...series.map((p) => Math.min(p.value, p.cost)))
+    : 0
+  const range = rawMax - rawMin
+  const maxVal = rawMax > 0
+    ? (range < rawMax * 0.01 ? rawMax * 1.15 : rawMax * 1.08)
     : 1
+
   const xFor = (i: number) =>
     series.length <= 1 ? padL + chartW / 2 : padL + (i / (series.length - 1)) * chartW
-  const yFor = (v: number) => padT + chartH - (v / maxVal) * chartH
+  const yFor = (v: number) => {
+    const y = padT + chartH - (v / maxVal) * chartH
+    return Number.isFinite(y) ? y : padT + chartH / 2
+  }
   const monthLbl = (mk: string) => {
     const mm = Number(mk.slice(5))
     return ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][mm] || mk
   }
   const xLabelStep = Math.max(1, Math.ceil(series.length / 6))
 
-  const valuePath = series.map((p, i) =>
-    `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.value).toFixed(2)}`
-  ).join(' ')
-  const costPath = series.map((p, i) =>
-    `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.cost).toFixed(2)}`
-  ).join(' ')
-
-  const areaPath = series.length >= 2 ? (() => {
-    const up = series.map((p, i) =>
-      `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.value).toFixed(2)}`
-    )
-    const down = [...series].reverse().map((p, i) =>
-      `L ${xFor(series.length - 1 - i).toFixed(2)} ${yFor(p.cost).toFixed(2)}`
-    )
-    return [...up, ...down, 'Z'].join(' ')
-  })() : ''
+  // Path dengan pengaman NaN — bila gagal, catat error dan gunakan path kosong
+  let valuePath = '', costPath = '', areaPath = ''
+  try {
+    valuePath = series.map((p, i) => {
+      const x = xFor(i), y = yFor(p.value)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error(`NaN di titik ${i}: x=${x} y=${y}`)
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
+    }).join(' ')
+    costPath = series.map((p, i) => {
+      const x = xFor(i), y = yFor(p.cost)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error(`NaN di titik ${i}: x=${x} y=${y}`)
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
+    }).join(' ')
+    if (series.length >= 2) {
+      const up = series.map((p, i) =>
+        `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.value).toFixed(2)}`
+      )
+      const down = [...series].reverse().map((p, i) =>
+        `L ${xFor(series.length - 1 - i).toFixed(2)} ${yFor(p.cost).toFixed(2)}`
+      )
+      areaPath = [...up, ...down, 'Z'].join(' ')
+    }
+    if (chartError) setChartError(null)
+  } catch (e) {
+    console.error('[InvestmentChart] Gagal menghitung path grafik:', e)
+    if (!chartError) setChartError('Grafik tidak dapat ditampilkan.')
+  }
 
   const yTicks = [0, 0.33, 0.66, 1].map((t) => maxVal * t)
 
@@ -547,8 +555,33 @@ export function InvestmentChart({
       )}
 
       {hasChart && (
-        <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
-          {W > 0 && (
+        // chartElRef: callback ref — aman untuk elemen yang dirender secara kondisional.
+        // Tinggi tetap H agar wadah tidak pernah runtuh jadi 0.
+        <div ref={chartElRef} style={{ position: 'relative', width: '100%', height: H }}>
+          {/* Pesan galat kalkulasi */}
+          {chartError && (
+            <div
+              style={{
+                position: 'absolute', inset: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <p className="muted" style={{ fontSize: 12 }}>{chartError}</p>
+            </div>
+          )}
+          {/* Skeleton saat lebar belum terukur (biasanya hanya satu frame) */}
+          {W === 0 && !chartError && (
+            <div
+              style={{
+                position: 'absolute', inset: 0,
+                background: 'var(--surface-2)',
+                borderRadius: 'var(--radius-sm)',
+                opacity: 0.5,
+              }}
+              aria-hidden="true"
+            />
+          )}
+          {W > 0 && !chartError && (
             <svg
               ref={svgRef}
               width={W}
@@ -560,7 +593,7 @@ export function InvestmentChart({
               onKeyDown={onSvgKey}
               onPointerMove={(e) => setHoveredIdx(pointerToIdx(e.clientX))}
               onPointerLeave={() => setHoveredIdx(null)}
-              style={{ display: 'block', outline: 'none', touchAction: 'pan-y' }}
+              style={{ display: 'block', outline: 'none', touchAction: 'pan-y', position: 'absolute', inset: 0 }}
             >
               {/* Grid Y */}
               {yTicks.map((v, i) => (
