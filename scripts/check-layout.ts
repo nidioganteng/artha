@@ -337,6 +337,54 @@ async function runPlaywright() {
       await p.close()
     }
 
+    // Sheet centering: panel terpusat vertikal dan horizontal di >= 768px
+    for (const w of [768, 1000, 1440, 1920]) {
+      for (const h of [700, 1000]) {
+        const p = await browser.newPage()
+        await p.setViewportSize({ width: w, height: h })
+        await p.goto(`${BASE}/#tx`)
+        await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+
+        const opened = await p.evaluate(`(function() {
+          var btns = Array.from(document.querySelectorAll('button'));
+          var add = btns.find(function(b) {
+            return (b.textContent.trim() === 'Tambah' || b.textContent.includes('Tambah Transaksi'))
+              && !b.closest('dialog');
+          });
+          if (add) { add.click(); return true; }
+          return false;
+        })()`) as boolean
+
+        if (opened) {
+          await p.waitForTimeout(400)
+          const cv = await p.evaluate(`(function(vw, vh) {
+            var dialog = document.querySelector('dialog[open]');
+            if (!dialog) return { vert: false, horiz: false, detail: 'dialog tidak ditemukan' };
+            var panel = dialog.querySelector('.sheet-inner');
+            if (!panel) return { vert: false, horiz: false, detail: 'sheet-inner tidak ditemukan' };
+            var rect = panel.getBoundingClientRect();
+            var topMargin = rect.top;
+            var bottomMargin = vh - rect.bottom;
+            var vertDiff = Math.abs(topMargin - bottomMargin);
+            var leftMargin = rect.left;
+            var rightMargin = vw - rect.right;
+            var horizDiff = Math.abs(leftMargin - rightMargin);
+            return {
+              vert: vertDiff < 2,
+              horiz: horizDiff < 2,
+              detail: 'vert diff ' + Math.round(vertDiff * 10) / 10 + 'px, horiz diff ' + Math.round(horizDiff * 10) / 10 + 'px'
+            };
+          })(${w}, ${h})`) as { vert: boolean; horiz: boolean; detail: string }
+          check(`Sheet ${w}x${h}: panel terpusat vertikal`, cv.vert, cv.detail)
+          check(`Sheet ${w}x${h}: panel terpusat horizontal`, cv.horiz, cv.detail)
+        } else {
+          check(`Sheet ${w}x${h}: panel terpusat vertikal`, false, 'sheet tidak bisa dibuka')
+          check(`Sheet ${w}x${h}: panel terpusat horizontal`, false, 'sheet tidak bisa dibuka')
+        }
+        await p.close()
+      }
+    }
+
     // Tangkapan layar
     mkdirSync(QA_DIR, { recursive: true })
     console.log(`\n  Mengambil tangkapan layar ke docs/qa/verify/...`)
