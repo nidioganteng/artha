@@ -1,10 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
+import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { usePortfolio, toLite } from '../lib/usePortfolio'
 import { computePosition } from '../lib/calc'
 import { dateLabel, idr, num, pct, todayISO } from '../lib/format'
-import { Sheet, EmptyState, Field, AmountText, MoneyInput, QuantityInput } from '../ui'
+import { Sheet, EmptyState, Field, AmountText, MoneyInput, QuantityInput, ConfirmDialog } from '../ui'
+import type { Trade } from '../lib/types'
 
 function plColor(n: number | null | undefined): string {
   if (n == null) return 'var(--text-2)'
@@ -53,6 +54,8 @@ export default function Investments() {
   const { rows, total, live, at, loading, refresh } = usePortfolio()
 
   const [open, setOpen] = useState(false)
+  const [editTrade, setEditTrade] = useState<Trade | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Trade | null>(null)
   const [assetId, setAssetId] = useState(() => db.assets[0]?.id ?? '')
   const [platformId, setPlatformId] = useState(() => db.platforms[0]?.id ?? '')
   const effectiveAssetId = db.assets.find((a) => a.id === assetId)?.id ?? db.assets[0]?.id ?? ''
@@ -71,10 +74,25 @@ export default function Investments() {
   const maxDecimals = asset?.asset_type === 'gold' ? 4 : 8
 
   function openAdd() {
+    setEditTrade(null)
     setQtyVal(null)
     setPriceVal(null)
     setFeeVal(null)
     setDate(todayISO())
+    setFormError('')
+    setOpen(true)
+  }
+
+  function openEdit(t: Trade) {
+    setEditTrade(t)
+    setAssetId(t.asset_id)
+    setPlatformId(t.platform_id ?? '')
+    setSide(t.side)
+    setQtyVal(t.quantity)
+    setMode('unit')
+    setPriceVal(t.price_per_unit)
+    setFeeVal(t.fee || null)
+    setDate(t.traded_on)
     setFormError('')
     setOpen(true)
   }
@@ -91,17 +109,59 @@ export default function Investments() {
     )
     if (f < 0) return setFormError('Biaya tidak valid.')
     const perUnit = mode === 'total' ? p / q : p
-    setFormError('')
-    save('trades', {
-      asset_id: effectiveAssetId,
-      platform_id: effectivePlatformId || null,
-      side,
-      quantity: q,
-      price_per_unit: perUnit,
-      fee: f,
-      traded_on: date,
-      note: null,
-    })
+
+    if (editTrade) {
+      // Validate that position won't go negative
+      const otherTrades = db.trades.filter(
+        (t) => t.asset_id === effectiveAssetId && t.id !== editTrade.id,
+      )
+      const newTrade = {
+        ...editTrade,
+        side,
+        quantity: q,
+        price_per_unit: perUnit,
+        fee: f,
+        traded_on: date,
+      }
+      const allTrades = [...otherTrades, newTrade].sort((a, b) =>
+        a.traded_on.localeCompare(b.traded_on),
+      )
+      let running = 0
+      for (const t of allTrades) {
+        if (t.side === 'buy') running += t.quantity
+        else running -= t.quantity
+        if (running < -0.000001) {
+          setFormError(
+            'Perubahan ini akan membuat posisi aset menjadi negatif. Periksa kembali jumlah dan jenis transaksi.',
+          )
+          return
+        }
+      }
+      setFormError('')
+      save('trades', {
+        ...editTrade,
+        asset_id: effectiveAssetId,
+        platform_id: effectivePlatformId || null,
+        side,
+        quantity: q,
+        price_per_unit: perUnit,
+        fee: f,
+        traded_on: date,
+      })
+    } else {
+      setFormError('')
+      save('trades', {
+        asset_id: effectiveAssetId,
+        platform_id: effectivePlatformId || null,
+        side,
+        quantity: q,
+        price_per_unit: perUnit,
+        fee: f,
+        traded_on: date,
+        note: null,
+      })
+    }
+    setEditTrade(null)
     setOpen(false)
   }
 
@@ -467,7 +527,7 @@ export default function Investments() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 12,
+                      gap: 8,
                       padding: '12px 16px',
                       borderTop: i > 0 ? '1px solid var(--border)' : 'none',
                       opacity: unsaved ? 0.6 : 1,
@@ -500,7 +560,7 @@ export default function Investments() {
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {isBuy ? 'Beli' : 'Jual'} {num(t.quantity)} {a?.unit ?? ''} {a?.symbol ?? ''}
+                        {isBuy ? 'Beli' : 'Jual'} {num(t.quantity)} {a?.symbol ?? a?.unit ?? ''}
                         {unsaved && (
                           <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--warn)' }}>
                             belum tersimpan
@@ -526,13 +586,19 @@ export default function Investments() {
                     </div>
                     <button
                       className="btn-ghost"
-                      aria-label="Hapus catatan"
-                      style={{ padding: 8, minHeight: 36, minWidth: 36, border: 'none' }}
-                      onClick={() => {
-                        if (confirm('Hapus catatan ini?')) remove('trades', t.id)
-                      }}
+                      aria-label="Edit catatan"
+                      onClick={() => openEdit(t)}
+                      style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--text-2)' }}
                     >
-                      ✕
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      className="btn-ghost"
+                      aria-label="Hapus catatan"
+                      onClick={() => setDeleteTarget(t)}
+                      style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--expense)' }}
+                    >
+                      <Trash2 size={15} />
                     </button>
                   </div>
                 )
@@ -542,14 +608,16 @@ export default function Investments() {
         </>
       )}
 
-      {/* Sheet: Catat DCA */}
+      {/* Sheet: Catat DCA / Edit */}
       <Sheet
         open={open}
-        onClose={() => setOpen(false)}
-        title="Catat DCA / Jual"
+        onClose={() => { setOpen(false); setEditTrade(null) }}
+        title={editTrade
+          ? (editTrade.side === 'buy' ? 'Edit Catatan DCA' : 'Edit Catatan Jual')
+          : 'Catat DCA / Jual'}
         footer={
           <button type="submit" form="form-inv" className="btn" style={{ width: '100%' }}>
-            Simpan
+            {editTrade ? 'Simpan Perubahan' : 'Simpan'}
           </button>
         }
       >
@@ -591,6 +659,7 @@ export default function Investments() {
               className="input"
               value={effectiveAssetId}
               onChange={(e) => setAssetId(e.target.value)}
+              disabled={!!editTrade}
             >
               {db.assets.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -685,6 +754,18 @@ export default function Investments() {
 
         </form>
       </Sheet>
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Hapus Catatan"
+        message="Hapus catatan investasi ini?"
+        onConfirm={() => {
+          if (deleteTarget) remove('trades', deleteTarget.id)
+          setDeleteTarget(null)
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

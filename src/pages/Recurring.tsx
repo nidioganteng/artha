@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { monthKey, monthLabel, shiftMonth, todayISO } from '../lib/format'
 import { formatShort } from '../lib/amount'
-import { Sheet, EmptyState, Field, Chip, MoneyInput } from '../ui'
+import { Sheet, EmptyState, Field, Chip, MoneyInput, ConfirmDialog } from '../ui'
 import type { RecurringRule } from '../lib/types'
 
 const KIND_LABEL: Record<RecurringRule['kind'], string> = {
@@ -18,6 +18,8 @@ export default function Recurring() {
   const monthDate = `${month}-01`
 
   const [open, setOpen] = useState(false)
+  const [editRule, setEditRule] = useState<RecurringRule | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<RecurringRule | null>(null)
 
   // Form state
   const [name, setName] = useState('')
@@ -82,7 +84,9 @@ export default function Recurring() {
   }
 
   function openAdd() {
+    setEditRule(null)
     setName('')
+    setKind('expense')
     setAmountVal(null)
     setDay('1')
     setCategoryId('')
@@ -90,23 +94,54 @@ export default function Recurring() {
     setOpen(true)
   }
 
-  function addRule(e: FormEvent) {
+  function openEdit(r: RecurringRule) {
+    setEditRule(r)
+    setName(r.name)
+    setKind(r.kind)
+    setAmountVal(r.amount)
+    setDay(String(r.day_of_month))
+    setCategoryId(r.category_id ?? '')
+    setFormError('')
+    setOpen(true)
+  }
+
+  function submitRule(e: FormEvent) {
     e.preventDefault()
     const d = Number(day)
     if (!name.trim()) return setFormError('Nama wajib diisi.')
     if (amountVal == null || amountVal <= 0) return setFormError('Nominal harus lebih dari 0.')
     if (!Number.isInteger(d) || d < 1 || d > 31) return setFormError('Tanggal harus 1 sampai 31.')
     setFormError('')
-    save('recurring_rules', {
-      name: name.trim(),
-      kind,
-      amount: amountVal,
-      day_of_month: d,
-      category_id: kind === 'invest' ? null : categoryId || null,
-      account_id: db.accounts[0]?.id ?? null,
-      active: true,
-    })
+    if (editRule) {
+      save('recurring_rules', {
+        ...editRule,
+        name: name.trim(),
+        kind,
+        amount: amountVal,
+        day_of_month: d,
+        category_id: kind === 'invest' ? null : categoryId || null,
+      })
+    } else {
+      save('recurring_rules', {
+        name: name.trim(),
+        kind,
+        amount: amountVal,
+        day_of_month: d,
+        category_id: kind === 'invest' ? null : categoryId || null,
+        account_id: db.accounts[0]?.id ?? null,
+        active: true,
+      })
+    }
+    setEditRule(null)
     setOpen(false)
+  }
+
+  function confirmDelete(r: RecurringRule) {
+    db.recurring_checks
+      .filter((c) => c.rule_id === r.id)
+      .forEach((c) => remove('recurring_checks', c.id))
+    remove('recurring_rules', r.id)
+    setDeleteTarget(null)
   }
 
   const isCurrentMonth = month === monthKey(todayISO())
@@ -253,7 +288,7 @@ export default function Recurring() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 12,
+                  gap: 8,
                   padding: '14px 16px',
                   borderTop: i > 0 ? '1px solid var(--border)' : 'none',
                   transition: 'opacity 150ms ease-out',
@@ -327,21 +362,24 @@ export default function Recurring() {
                   {formatShort(r.amount)}
                 </div>
 
+                {/* Edit */}
+                <button
+                  className="btn-ghost"
+                  aria-label={`Edit aturan ${r.name}`}
+                  onClick={() => openEdit(r)}
+                  style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--text-2)' }}
+                >
+                  <Pencil size={15} />
+                </button>
+
                 {/* Delete */}
                 <button
                   className="btn-ghost"
                   aria-label={`Hapus aturan ${r.name}`}
-                  style={{ padding: 8, minHeight: 36, minWidth: 36, border: 'none' }}
-                  onClick={() => {
-                    if (confirm(`Hapus aturan "${r.name}"? Riwayat checklist-nya ikut terhapus.`)) {
-                      db.recurring_checks
-                        .filter((c) => c.rule_id === r.id)
-                        .forEach((c) => remove('recurring_checks', c.id))
-                      remove('recurring_rules', r.id)
-                    }
-                  }}
+                  onClick={() => setDeleteTarget(r)}
+                  style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--expense)' }}
                 >
-                  ✕
+                  <Trash2 size={15} />
                 </button>
               </div>
             )
@@ -349,18 +387,18 @@ export default function Recurring() {
         </div>
       )}
 
-      {/* Add Rule Sheet */}
+      {/* Add/Edit Rule Sheet */}
       <Sheet
         open={open}
-        onClose={() => setOpen(false)}
-        title="Tambah Aturan Rutin"
+        onClose={() => { setOpen(false); setEditRule(null) }}
+        title={editRule ? 'Edit Aturan Rutin' : 'Tambah Aturan Rutin'}
         footer={
           <button type="submit" form="form-rec" className="btn" style={{ width: '100%' }}>
-            Tambah
+            {editRule ? 'Simpan Perubahan' : 'Tambah'}
           </button>
         }
       >
-        <form id="form-rec" onSubmit={addRule} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <form id="form-rec" onSubmit={submitRule} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Field label="Nama" htmlFor="rec-name">
             <input
               id="rec-name"
@@ -421,6 +459,15 @@ export default function Recurring() {
 
         </form>
       </Sheet>
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Hapus Aturan Rutin"
+        message={deleteTarget ? `Hapus aturan "${deleteTarget.name}"? Riwayat bulan ini ikut terhapus.` : undefined}
+        onConfirm={() => { if (deleteTarget) confirmDelete(deleteTarget) }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

@@ -173,6 +173,24 @@ ok('isAuthError: bukan auth — RLS', !isAuthError('row-level security policy'))
   ok('findBlocker: op non-blocked tetap memblokir', findBlocker(anotherTrade, [failedAsset, blockedTrade]) === failedAsset.opId)
 }
 
+// ── Edit offline (upsert id sama) ─────────────────────────────────────────────
+ok('edit offline: upsert id sama = update tanpa duplikat', (() => {
+  const db1 = applyOps(emptyDB(), [ups('transactions', row('tx1', { amount: 100 }))])
+  const db2 = applyOps(db1, [ups('transactions', row('tx1', { amount: 200 }))])
+  return db2.transactions.length === 1 && (db2.transactions[0] as { amount: number }).amount === 200
+})())
+
+ok('hapus offline: delete masuk antrean lalu baris hilang', (() => {
+  const db1 = applyOps(emptyDB(), [ups('transactions', row('tx1', { amount: 100 }))])
+  const db2 = applyOps(db1, [del('transactions', 'tx1')])
+  return db2.transactions.length === 0
+})())
+
+ok('hapus offline: delete id tidak ada tidak error', (() => {
+  const db = applyOps(emptyDB(), [del('transactions', 'nonexistent')])
+  return db.transactions.length === 0
+})())
+
 // ── skenario lengkap: aset gagal → trade diblokir ────────────────────────────
 {
   // Simulasikan: upsert aset gagal, lalu queue masih punya trade untuk aset itu

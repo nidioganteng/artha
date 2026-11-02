@@ -1,10 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
-import { dateLabel, monthKey, monthLabel, shiftMonth, todayISO } from '../lib/format'
-import { formatShort } from '../lib/amount'
-import { Sheet, EmptyState, Field, MoneyInput } from '../ui'
-import type { Kind } from '../lib/types'
+import { dateLabel, idr, monthKey, monthLabel, shiftMonth, todayISO } from '../lib/format'
+import { Sheet, EmptyState, Field, MoneyInput, ConfirmDialog } from '../ui'
+import type { Kind, Transaction } from '../lib/types'
 
 type Filter = Kind | 'all'
 
@@ -13,6 +12,8 @@ export default function Transactions() {
   const [month, setMonth] = useState(() => monthKey(todayISO()))
   const [filter, setFilter] = useState<Filter>('all')
   const [open, setOpen] = useState(false)
+  const [editTx, setEditTx] = useState<Transaction | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
 
   // Form state
   const [kind, setKind] = useState<Kind>('expense')
@@ -51,10 +52,25 @@ export default function Transactions() {
   }, [db.transactions, month])
 
   function openAdd() {
+    setEditTx(null)
+    setKind('expense')
     setDate(todayISO())
     setAmountVal(null)
     setNote('')
     setCategoryId('')
+    setAccountId(db.accounts[0]?.id ?? '')
+    setFormError('')
+    setOpen(true)
+  }
+
+  function openEdit(tx: Transaction) {
+    setEditTx(tx)
+    setKind(tx.kind)
+    setAmountVal(tx.amount)
+    setCategoryId(tx.category_id ?? '')
+    setAccountId(tx.account_id ?? db.accounts[0]?.id ?? '')
+    setDate(tx.occurred_on)
+    setNote(tx.note ?? '')
     setFormError('')
     setOpen(true)
   }
@@ -66,15 +82,28 @@ export default function Transactions() {
       return
     }
     setFormError('')
-    save('transactions', {
-      kind,
-      amount: amountVal,
-      category_id: categoryId || null,
-      account_id: effectiveAccountId || null,
-      occurred_on: date,
-      note: note.trim() || null,
-      recurring_rule_id: null,
-    })
+    if (editTx) {
+      save('transactions', {
+        ...editTx,
+        kind,
+        amount: amountVal,
+        category_id: categoryId || null,
+        account_id: effectiveAccountId || null,
+        occurred_on: date,
+        note: note.trim() || null,
+      })
+    } else {
+      save('transactions', {
+        kind,
+        amount: amountVal,
+        category_id: categoryId || null,
+        account_id: effectiveAccountId || null,
+        occurred_on: date,
+        note: note.trim() || null,
+        recurring_rule_id: null,
+      })
+    }
+    setEditTx(null)
     setOpen(false)
   }
 
@@ -155,8 +184,8 @@ export default function Transactions() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <span className="chip chip-income">+{formatShort(income)}</span>
-          <span className="chip chip-expense">-{formatShort(expense)}</span>
+          <span className="chip chip-income">+{idr(income)}</span>
+          <span className="chip chip-expense">-{idr(expense)}</span>
         </div>
       </div>
 
@@ -231,7 +260,7 @@ export default function Transactions() {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 12,
+                        gap: 8,
                         padding: '12px 16px',
                         borderTop: i > 0 ? '1px solid var(--border)' : 'none',
                         opacity: unsaved ? 0.6 : 1,
@@ -291,17 +320,23 @@ export default function Transactions() {
                           flexShrink: 0,
                         }}
                       >
-                        {isIncome ? '+' : '-'}{formatShort(tx.amount)}
+                        {isIncome ? '+' : '-'}{idr(tx.amount)}
                       </div>
                       <button
                         className="btn-ghost"
-                        aria-label="Hapus transaksi"
-                        style={{ padding: 8, minHeight: 36, minWidth: 36, border: 'none' }}
-                        onClick={() => {
-                          if (confirm('Hapus transaksi ini?')) remove('transactions', tx.id)
-                        }}
+                        aria-label="Edit transaksi"
+                        onClick={() => openEdit(tx)}
+                        style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--text-2)' }}
                       >
-                        ✕
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="btn-ghost"
+                        aria-label="Hapus transaksi"
+                        onClick={() => setDeleteTarget(tx)}
+                        style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--expense)' }}
+                      >
+                        <Trash2 size={15} />
                       </button>
                     </div>
                   )
@@ -312,14 +347,14 @@ export default function Transactions() {
         </div>
       )}
 
-      {/* Add Transaction Sheet */}
+      {/* Add/Edit Transaction Sheet */}
       <Sheet
         open={open}
-        onClose={() => setOpen(false)}
-        title="Tambah Transaksi"
+        onClose={() => { setOpen(false); setEditTx(null) }}
+        title={editTx ? 'Edit Transaksi' : 'Tambah Transaksi'}
         footer={
           <button type="submit" form="form-tx" className="btn" style={{ width: '100%' }}>
-            Simpan
+            {editTx ? 'Simpan Perubahan' : 'Simpan'}
           </button>
         }
       >
@@ -411,6 +446,18 @@ export default function Transactions() {
 
         </form>
       </Sheet>
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Hapus Transaksi"
+        message="Hapus transaksi ini?"
+        onConfirm={() => {
+          if (deleteTarget) remove('transactions', deleteTarget.id)
+          setDeleteTarget(null)
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }
