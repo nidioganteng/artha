@@ -339,6 +339,10 @@ export default function Investments() {
           priceHistory={db.price_snapshots}
           currentPrices={prices}
           live={live}
+          onOpenDCA={(assetId) => {
+            if (assetId) setAssetId(assetId)
+            openAdd()
+          }}
         />
       </div>
 

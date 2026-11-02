@@ -88,6 +88,24 @@ check('CSS: .sheet-content scrollbar-width thin', css.includes('scrollbar-width:
 // Investments: pakai InvestmentChart
 check('Investments: pakai InvestmentChart', invPage.includes('<InvestmentChart') && invPage.includes("from '../ui/InvestmentChart'"))
 
+// InvestmentChart: tidak ada early return yang menyembunyikan kontrol (chip aset/periode)
+// Sebelum perbaikan, ada dua `return (` sebelum render kontrol, sehingga kontrol hilang
+const invChart = read('src/ui/InvestmentChart.tsx')
+// Kontrol harus selalu dirender: cari data-testid="investment-chart" dan pastikan
+// tidak ada return lebih dari satu sebelum ChipBar/chip aset
+const topLevelReturnCount = (() => {
+  // Cari early return di level atas fungsi InvestmentChart (indent 2 spasi, bukan di callback)
+  // Buggy pattern: `  return (\n    <div className="card bento-full"` tanpa kontrol chip
+  const mainFnStart = invChart.indexOf('export function InvestmentChart')
+  const mainFnBody = mainFnStart >= 0 ? invChart.slice(mainFnStart) : ''
+  // Top-level return: baris yang diawali tepat 2 spasi, bukan di dalam arrow function
+  const lines = mainFnBody.split('\n')
+  return lines.filter((l) => /^  return\s*\(/.test(l)).length
+})()
+check('InvestmentChart: tepat 1 top-level return di komponen utama (tidak ada early return)',
+  topLevelReturnCount === 1,
+  `ditemukan ${topLevelReturnCount} top-level return, harus tepat 1`)
+
 // Halaman: form id + tombol footer
 check('Transactions: form id="form-tx"', txPage.includes('id="form-tx"'))
 check('Transactions: tombol form="form-tx"', txPage.includes('form="form-tx"'))
@@ -625,6 +643,126 @@ async function runPlaywright() {
       check(`InvestChart ${w}px: tidak ada horizontal scroll`, r.noHorizontalScroll, r.detail)
       check(`InvestChart ${w}px: kartu tidak overflow`, r.noCardOverflow, r.detail)
       await p.close()
+    }
+
+    // ── InvestmentChart empty-state: kontrol selalu tampil ──
+    for (const w of [390, 768, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#inv`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(500)
+
+      const er = await p.evaluate(`(function(vw) {
+        var card = document.querySelector('[data-testid="investment-chart"]');
+        if (!card) return { ok: false, detail: 'kartu tidak ditemukan' };
+
+        // 1. Judul selalu ada
+        var h2 = card.querySelector('h2');
+        var titleOk = h2 && h2.textContent && h2.textContent.indexOf('Perkembangan Investasi') >= 0;
+
+        // 2. Chip "Semua" selalu ada (tombol dengan teks "Semua" di dalam kartu)
+        var btns = Array.from(card.querySelectorAll('button'));
+        var semuaBtn = btns.find(function(b) { return b.textContent && b.textContent.trim() === 'Semua'; });
+        var semuaBtnVisible = semuaBtn ? (function(el) {
+          var r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        })(semuaBtn) : false;
+
+        // 3. Chip periode (6B, 12B, Semua) selalu ada
+        var periodBtns = btns.filter(function(b) {
+          var t = b.textContent && b.textContent.trim();
+          return t === '6B' || t === '12B';
+        });
+        var periodChipsOk = periodBtns.length >= 2;
+
+        // 4. Tidak ada horizontal scroll
+        var noHScroll = document.documentElement.scrollWidth <= vw + 1;
+
+        // 5. Kartu ada di viewport (tidak tersembunyi)
+        var cardRect = card.getBoundingClientRect();
+        var cardInView = cardRect.width > 0;
+
+        // 6. Area kosong memakai teks biasa (bukan num-hero)
+        var emptyMsg = card.querySelector('[class*="muted"]');
+        var emptyMsgOk = !!emptyMsg;
+
+        return {
+          titleOk: !!titleOk,
+          semuaBtnVisible: semuaBtnVisible,
+          periodChipsOk: periodChipsOk,
+          noHScroll: noHScroll,
+          cardInView: cardInView,
+          emptyMsgOk: emptyMsgOk,
+          detail: 'title=' + !!titleOk + ' semuaBtn=' + semuaBtnVisible + ' periodChips=' + periodBtns.length + ' hScroll=' + !noHScroll + ' scrollW=' + document.documentElement.scrollWidth + ' vw=' + vw
+        };
+      })(${w})`) as {
+        titleOk: boolean; semuaBtnVisible: boolean; periodChipsOk: boolean
+        noHScroll: boolean; cardInView: boolean; emptyMsgOk: boolean; detail: string
+      }
+
+      check(`InvestChart-empty ${w}px: judul selalu tampil`, er.titleOk, er.detail)
+      check(`InvestChart-empty ${w}px: chip "Semua" selalu tampil`, er.semuaBtnVisible, er.detail)
+      check(`InvestChart-empty ${w}px: chip periode selalu tampil`, er.periodChipsOk, er.detail)
+      check(`InvestChart-empty ${w}px: tidak ada horizontal scroll`, er.noHScroll, er.detail)
+      check(`InvestChart-empty ${w}px: pesan kosong memakai teks biasa`, er.emptyMsgOk, er.detail)
+      await p.close()
+    }
+
+    // ── InvestmentChart: localStorage berisi id aset yang tidak ada → kembali ke "Semua" ──
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 390, height: 700 })
+      // Set fake asset id di localStorage sebelum navigasi
+      await p.goto(`${BASE}/#inv`)
+      await p.evaluate(`localStorage.setItem('artha:chart:asset', 'aaaaaaaa-fake-fake-fake-aaaaaaaaaaaa')`)
+      await p.reload()
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(600)
+
+      const ls = await p.evaluate(`(function() {
+        var card = document.querySelector('[data-testid="investment-chart"]');
+        var btns = card ? Array.from(card.querySelectorAll('button')) : [];
+        var semuaBtn = btns.find(function(b) { return b.textContent && b.textContent.trim() === 'Semua'; });
+        // Cek chip "Semua" terlihat (kontrol tidak menghilang)
+        var semuaVisible = semuaBtn ? semuaBtn.getBoundingClientRect().width > 0 : false;
+        // Cek nilai localStorage setelah validasi (seharusnya direvert ke 'all' atau tetap fake tapi UI tetap tampil)
+        var storedAsset = localStorage.getItem('artha:chart:asset');
+        return {
+          cardPresent: !!card,
+          semuaVisible: semuaVisible,
+          storedAsset: storedAsset,
+          detail: 'card=' + !!card + ' semuaVisible=' + semuaVisible + ' stored=' + storedAsset
+        };
+      })()`) as { cardPresent: boolean; semuaVisible: boolean; storedAsset: string | null; detail: string }
+
+      check('InvestChart: localStorage fake asset id → kartu tetap tampil', ls.cardPresent, ls.detail)
+      check('InvestChart: localStorage fake asset id → chip "Semua" masih terlihat', ls.semuaVisible, ls.detail)
+      await p.close()
+    }
+
+    // ── InvestmentChart: tangkapan empty state palet A/B terang/gelap ──
+    mkdirSync(resolve(QA_DIR, '..', 'empty-state'), { recursive: true })
+    {
+      for (const pal of ['a', 'b'] as const) {
+        for (const mod of ['light', 'dark'] as const) {
+          const p = await browser.newPage()
+          await p.setViewportSize({ width: 390, height: 700 })
+          await p.goto(`${BASE}/#inv`)
+          await p.evaluate(`(function(pal, m) {
+            localStorage.setItem('artha:palette', pal);
+            localStorage.setItem('artha:mode', m);
+          })('${pal}', '${mod}')`)
+          await p.reload()
+          await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+          await p.waitForTimeout(400)
+          const card = await p.$('[data-testid="investment-chart"]')
+          if (card) {
+            await card.screenshot({ path: resolve(QA_DIR, '..', 'empty-state', `invest-empty-${pal}-${mod}-390.png`) })
+          }
+          await p.close()
+        }
+      }
     }
 
     // Tangkapan layar

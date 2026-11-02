@@ -5,7 +5,7 @@ import { formatShort } from '../lib/amount'
 import { formatPercent, idr, todayISO } from '../lib/format'
 
 // ──────────────────────────────────────────────────────
-// Hook: lebar container via ResizeObserver (SVG viewBox 1:1)
+// Hook: lebar kontainer via ResizeObserver (SVG viewBox 1:1)
 // ──────────────────────────────────────────────────────
 function useElementWidth(ref: { current: HTMLDivElement | null }) {
   const [width, setWidth] = useState(0)
@@ -44,20 +44,141 @@ function readAsset(): string {
   }
 }
 
+// ── Chip bar — scrollable horizontal tanpa trigger scroll halaman
+function ChipBar({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 6,
+        overflowX: 'auto',
+        overscrollBehaviorX: 'contain',
+        WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'],
+        scrollbarWidth: 'none' as React.CSSProperties['scrollbarWidth'],
+        paddingBottom: 2,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+// ── Chip tunggal
+function Chip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flexShrink: 0,
+        padding: '5px 12px',
+        borderRadius: 9999,
+        border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+        background: active ? 'var(--primary)' : 'transparent',
+        color: active ? 'var(--primary-fg)' : 'var(--text-2)',
+        fontSize: 13,
+        fontWeight: active ? 600 : 400,
+        cursor: 'pointer',
+        minHeight: 34,
+        fontFamily: 'inherit',
+        whiteSpace: 'nowrap' as const,
+        transition: 'background 120ms ease-out, color 120ms ease-out',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+// ── Area grafik kosong dengan tinggi tetap dan salib sumbu samar
+function EmptyChartArea({
+  height,
+  children,
+}: {
+  height: number
+  children: React.ReactNode
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const W = useElementWidth(wrapRef)
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%', height }}>
+      {W > 0 && (
+        <svg
+          width={W}
+          height={height}
+          viewBox={`0 0 ${W} ${height}`}
+          aria-hidden="true"
+          style={{ display: 'block', position: 'absolute', inset: 0 }}
+        >
+          {/* Grid samar */}
+          {[0.25, 0.5, 0.75].map((t) => (
+            <line
+              key={t}
+              x1={8}
+              x2={W - 8}
+              y1={height * t}
+              y2={height * t}
+              stroke="var(--border)"
+              strokeWidth={1}
+              strokeDasharray="2 4"
+              opacity={0.5}
+            />
+          ))}
+          {/* Garis bawah */}
+          <line
+            x1={8}
+            x2={W - 8}
+            y1={height - 28}
+            y2={height - 28}
+            stroke="var(--border)"
+            strokeWidth={1}
+          />
+        </svg>
+      )}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          padding: '16px 24px',
+          textAlign: 'center',
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function InvestmentChart({
   trades,
   assets,
   priceHistory,
   currentPrices,
   live,
+  onOpenDCA,
 }: {
   trades: Trade[]
   assets: Asset[]
   priceHistory: PriceSnapshot[]
   currentPrices: Record<string, number>
   live: boolean
+  onOpenDCA?: (assetId?: string) => void
 }) {
   const today = todayISO()
+  const H = 240
 
   const [filterAsset, setFilterAsset] = useState<string>(() => readAsset())
   const [period, setPeriod] = useState<Period>(() => readPeriod())
@@ -67,32 +188,28 @@ export function InvestmentChart({
   const wrapRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const W = useElementWidth(wrapRef)
-  const H = 240
 
+  // Simpan preferensi ke localStorage
   useEffect(() => {
-    try {
-      localStorage.setItem('artha:chart:asset', filterAsset)
-    } catch {
-      // abaikan
-    }
+    try { localStorage.setItem('artha:chart:asset', filterAsset) } catch { /* abaikan */ }
   }, [filterAsset])
-
   useEffect(() => {
-    try {
-      localStorage.setItem('artha:chart:period', String(period))
-    } catch {
-      // abaikan
-    }
+    try { localStorage.setItem('artha:chart:period', String(period)) } catch { /* abaikan */ }
   }, [period])
 
-  // Jika aset terpilih tidak lagi ada di daftar (dihapus), kembali ke 'all'
+  // Validasi filterAsset terhadap daftar aset — HANYA bila daftar sudah termuat
   useEffect(() => {
     if (filterAsset === 'all') return
+    if (assets.length === 0) return  // masih memuat, jangan reset
     if (!assets.some((a) => a.id === filterAsset)) setFilterAsset('all')
   }, [assets, filterAsset])
 
-  // Siapkan mapping harga live symbol → nilai (saat ini usePortfolio
-  // menyediakan prices via price_ref, bukan symbol; kita konversi di sini)
+  // Reset hover saat data berubah
+  useEffect(() => {
+    setHoveredIdx((idx) => (idx != null && idx < series.length ? idx : null))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades.length, filterAsset, period])
+
   const priceBySymbol = useMemo<Record<string, number>>(() => {
     const out: Record<string, number> = {}
     for (const a of assets) {
@@ -101,7 +218,6 @@ export function InvestmentChart({
         const p = (currentPrices as Record<string, number>)[ref]
         if (p != null && Number.isFinite(p) && p > 0) out[a.symbol] = p
       }
-      // Fallback: manual_price di aset itu sendiri
       if (!out[a.symbol] && a.manual_price != null && a.manual_price > 0) {
         out[a.symbol] = a.manual_price
       }
@@ -121,157 +237,96 @@ export function InvestmentChart({
     )
   }, [trades, assets, priceHistory, priceBySymbol, filterAsset, period, today])
 
-  // Reset hoveredIdx jika data berubah
-  useEffect(() => {
-    setHoveredIdx((idx) => (idx != null && idx < series.length ? idx : null))
-  }, [series.length])
+  // ── Info aset terpilih (untuk pesan kosong)
+  const selectedAsset = filterAsset !== 'all'
+    ? assets.find((a) => a.id === filterAsset)
+    : null
 
-  // ────── Empty states ──────
-  if (trades.length === 0) {
-    return (
-      <div className="card bento-full" data-testid="investment-chart">
-        <h2
-          style={{
-            fontSize: 15,
-            fontWeight: 700,
-            color: 'var(--text-1)',
-            letterSpacing: '-0.01em',
-            margin: '0 0 8px 0',
-          }}
-        >
-          Perkembangan Investasi
-        </h2>
-        <p className="muted" style={{ fontSize: 13 }}>
-          Belum ada catatan investasi. Catat DCA pertama untuk mulai melihat perkembangan.
-        </p>
-      </div>
-    )
-  }
-
-  if (series.length === 0) {
-    return (
-      <div className="card bento-full" data-testid="investment-chart">
-        <h2
-          style={{
-            fontSize: 15,
-            fontWeight: 700,
-            color: 'var(--text-1)',
-            letterSpacing: '-0.01em',
-            margin: '0 0 8px 0',
-          }}
-        >
-          Perkembangan Investasi
-        </h2>
-        <p className="muted" style={{ fontSize: 13 }}>
-          Belum ada data cukup untuk aset terpilih.
-        </p>
-      </div>
-    )
-  }
-
-  const last = series[series.length - 1]
+  // ── Ringkasan
+  const last = series.length > 0 ? series[series.length - 1] : null
   const secondLast = series.length >= 2 ? series[series.length - 2] : null
   const momValue = secondLast && secondLast.value > 0
-    ? (last.value - secondLast.value) / secondLast.value
+    ? (last!.value - secondLast.value) / secondLast.value
+    : null
+  const momAbs = secondLast && secondLast.value > 0
+    ? last!.value - secondLast.value
     : null
   const anyEstimate = series.some((p) => p.quality === 'estimate')
 
-  // ──────────────────────────────────────────────────────
-  // Geometri SVG — viewBox 1:1 dengan W × H (tanpa preserveAspectRatio="none")
-  // ──────────────────────────────────────────────────────
-  const padL = 8
-  const padR = 8
-  const padT = 10
-  const padB = 28
+  // ── Geometri SVG
+  const padL = 8, padR = 8, padT = 10, padB = 28
   const chartW = Math.max(50, W - padL - padR)
   const chartH = H - padT - padB
-
-  const maxVal = Math.max(
-    1,
-    ...series.map((p) => Math.max(p.value, p.cost)),
-  )
-  const yMax = maxVal * 1.08
+  const maxVal = series.length > 0
+    ? Math.max(1, ...series.map((p) => Math.max(p.value, p.cost))) * 1.08
+    : 1
   const xFor = (i: number) =>
-    series.length === 1 ? padL + chartW / 2 : padL + (i / (series.length - 1)) * chartW
-  const yFor = (v: number) => padT + chartH - (v / yMax) * chartH
-
-  const valuePath = series
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.value).toFixed(2)}`)
-    .join(' ')
-  const costPath = series
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.cost).toFixed(2)}`)
-    .join(' ')
-
-  // Area antara Nilai dan Modal — di-fill dengan warna income/expense per titik
-  // sederhana: satu polygon dengan Nilai di atas dan Modal di bawah (atau sebaliknya)
-  const areaPath = (() => {
-    if (series.length < 2) return ''
-    const up: string[] = []
-    for (let i = 0; i < series.length; i++) {
-      up.push(`${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(series[i].value).toFixed(2)}`)
-    }
-    for (let i = series.length - 1; i >= 0; i--) {
-      up.push(`L ${xFor(i).toFixed(2)} ${yFor(series[i].cost).toFixed(2)}`)
-    }
-    up.push('Z')
-    return up.join(' ')
-  })()
-
-  // Tick Y sumbu (4 label)
-  const yTicks = [0, 0.33, 0.66, 1].map((t) => yMax * t)
-
-  // Label X: tampilkan setiap N langkah agar tidak padat
-  const xLabelStep = Math.max(1, Math.ceil(series.length / 6))
-  const monthLabel = (mk: string) => {
-    const [, mm] = mk.split('-')
-    const names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-    return names[Number(mm)] || mk
+    series.length <= 1 ? padL + chartW / 2 : padL + (i / (series.length - 1)) * chartW
+  const yFor = (v: number) => padT + chartH - (v / maxVal) * chartH
+  const monthLbl = (mk: string) => {
+    const mm = Number(mk.slice(5))
+    return ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][mm] || mk
   }
+  const xLabelStep = Math.max(1, Math.ceil(series.length / 6))
 
-  // Posisi tooltip ke pixel container
+  const valuePath = series.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.value).toFixed(2)}`
+  ).join(' ')
+  const costPath = series.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.cost).toFixed(2)}`
+  ).join(' ')
+
+  const areaPath = series.length >= 2 ? (() => {
+    const up = series.map((p, i) =>
+      `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(2)} ${yFor(p.value).toFixed(2)}`
+    )
+    const down = [...series].reverse().map((p, i) =>
+      `L ${xFor(series.length - 1 - i).toFixed(2)} ${yFor(p.cost).toFixed(2)}`
+    )
+    return [...up, ...down, 'Z'].join(' ')
+  })() : ''
+
+  const yTicks = [0, 0.33, 0.66, 1].map((t) => maxVal * t)
+
   const tipIdx = hoveredIdx
   const tip = tipIdx != null && series[tipIdx]
     ? { px: xFor(tipIdx), py: yFor(series[tipIdx].value), p: series[tipIdx] }
     : null
 
-  // Keyboard navigasi
   function onSvgKey(e: React.KeyboardEvent<SVGSVGElement>) {
     if (series.length === 0) return
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
-      setHoveredIdx((idx) => {
-        const base = idx ?? series.length - 1
-        return Math.max(0, base - 1)
-      })
+      setHoveredIdx((idx) => Math.max(0, (idx ?? series.length - 1) - 1))
     } else if (e.key === 'ArrowRight') {
       e.preventDefault()
-      setHoveredIdx((idx) => {
-        const base = idx ?? 0
-        return Math.min(series.length - 1, base + 1)
-      })
+      setHoveredIdx((idx) => Math.min(series.length - 1, (idx ?? 0) + 1))
     } else if (e.key === 'Home') {
-      e.preventDefault()
-      setHoveredIdx(0)
+      e.preventDefault(); setHoveredIdx(0)
     } else if (e.key === 'End') {
-      e.preventDefault()
-      setHoveredIdx(series.length - 1)
+      e.preventDefault(); setHoveredIdx(series.length - 1)
     } else if (e.key === 'Escape') {
       setHoveredIdx(null)
     }
   }
 
   function pointerToIdx(clientX: number): number {
-    if (!svgRef.current) return 0
+    if (!svgRef.current || series.length === 0) return 0
     const rect = svgRef.current.getBoundingClientRect()
-    const x = clientX - rect.left
-    const t = (x - padL) / Math.max(1, chartW)
-    const idx = Math.round(t * (series.length - 1))
-    return Math.max(0, Math.min(series.length - 1, idx))
+    const t = ((clientX - rect.left) - padL) / Math.max(1, chartW)
+    return Math.max(0, Math.min(series.length - 1, Math.round(t * (series.length - 1))))
   }
+
+  // ── Penentu konten area grafik
+  const noTradesAtAll = trades.length === 0
+  const noTradesForFilter = !noTradesAtAll && series.length === 0 && filterAsset !== 'all'
+  const singlePoint = !noTradesAtAll && series.length === 1
+  const hasChart = series.length >= 2
 
   return (
     <div className="card bento-full" data-testid="investment-chart">
-      {/* Judul + ringkasan */}
+
+      {/* ── SELALU TAMPIL: Judul + ringkasan */}
       <div
         style={{
           display: 'flex',
@@ -279,7 +334,7 @@ export function InvestmentChart({
           justifyContent: 'space-between',
           gap: 12,
           flexWrap: 'wrap',
-          marginBottom: 12,
+          marginBottom: 10,
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -294,14 +349,8 @@ export function InvestmentChart({
           >
             Perkembangan Investasi
           </h2>
-          <div
-            style={{
-              display: 'flex',
-              gap: 16,
-              flexWrap: 'wrap',
-              alignItems: 'baseline',
-            }}
-          >
+          {/* Ringkasan nilai: "-" bila belum ada data */}
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline' }}>
             <div
               style={{
                 fontFamily: 'var(--font-mono)',
@@ -309,10 +358,11 @@ export function InvestmentChart({
                 fontWeight: 700,
                 color: 'var(--text-1)',
               }}
+              aria-label={last ? `Nilai saat ini ${idr(last.value)}` : 'Nilai belum tersedia'}
             >
-              {idr(last.value)}
+              {last ? formatShort(last.value) : '-'}
             </div>
-            {momValue != null && (
+            {momValue != null && momAbs != null && (
               <div
                 style={{
                   fontFamily: 'var(--font-mono)',
@@ -320,348 +370,422 @@ export function InvestmentChart({
                   fontWeight: 600,
                   color: momValue >= 0 ? 'var(--income)' : 'var(--expense)',
                 }}
-                aria-label={`Perubahan bulan ini ${formatPercent(momValue)}`}
               >
-                {momValue >= 0 ? '+' : ''}
-                {formatPercent(momValue)}
+                {momValue >= 0 ? 'Naik' : 'Turun'} {formatPercent(Math.abs(momValue))}
+                {' '}({momAbs >= 0 ? '+' : ''}{formatShort(momAbs)}) dari bulan lalu
               </div>
             )}
-            <div
-              className="muted"
-              style={{ fontSize: 12 }}
-              aria-label={`Total untung rugi ${idr(last.pl)}`}
-            >
-              U/R{' '}
-              <span
-                style={{
-                  color: last.pl >= 0 ? 'var(--income)' : 'var(--expense)',
-                  fontWeight: 600,
-                  fontFamily: 'var(--font-mono)',
-                }}
+            {last && momValue === null && series.length >= 2 && (
+              <span className="muted" style={{ fontSize: 12 }}>Belum ada pembanding bulan lalu</span>
+            )}
+            {last && (
+              <div
+                className="muted"
+                style={{ fontSize: 12 }}
+                aria-label={`Total untung rugi ${idr(last.pl)}`}
               >
-                {last.pl >= 0 ? '+' : ''}
-                {formatShort(last.pl)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Kontrol: filter aset + periode */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <select
-            className="input"
-            value={filterAsset}
-            onChange={(e) => setFilterAsset(e.target.value)}
-            aria-label="Filter aset"
-            style={{ minHeight: 36, padding: '6px 12px', fontSize: 13, minWidth: 120 }}
-          >
-            <option value="all">Semua aset</option>
-            {assets.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <div
-            role="radiogroup"
-            aria-label="Rentang waktu"
-            style={{
-              display: 'inline-flex',
-              gap: 2,
-              background: 'var(--surface-2)',
-              borderRadius: 'var(--radius-sm)',
-              padding: 2,
-              border: '1px solid var(--border)',
-            }}
-          >
-            {([6, 12, 'all'] as const).map((p) => {
-              const active = period === p
-              return (
-                <button
-                  key={String(p)}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setPeriod(p)}
+                U/R{' '}
+                <span
                   style={{
-                    minHeight: 32,
-                    padding: '4px 10px',
-                    fontSize: 12,
+                    color: last.pl >= 0 ? 'var(--income)' : 'var(--expense)',
                     fontWeight: 600,
-                    fontFamily: 'inherit',
-                    background: active ? 'var(--surface)' : 'transparent',
-                    color: active ? 'var(--text-1)' : 'var(--text-2)',
-                    border: active ? '1px solid var(--border)' : '1px solid transparent',
-                    borderRadius: 'calc(var(--radius-sm) - 2px)',
-                    cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)',
                   }}
                 >
-                  {p === 'all' ? 'Semua' : `${p}B`}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* SVG grafik */}
-      <div ref={wrapRef} style={{ width: '100%', position: 'relative' }}>
-        {W > 0 && (
-          <svg
-            ref={svgRef}
-            width={W}
-            height={H}
-            viewBox={`0 0 ${W} ${H}`}
-            role="img"
-            tabIndex={0}
-            aria-label="Grafik perkembangan nilai dan modal portofolio"
-            onKeyDown={onSvgKey}
-            onPointerMove={(e) => setHoveredIdx(pointerToIdx(e.clientX))}
-            onPointerLeave={() => setHoveredIdx(null)}
-            style={{ display: 'block', outline: 'none', touchAction: 'pan-y' }}
-          >
-            {/* grid Y */}
-            {yTicks.map((v, i) => (
-              <line
-                key={`gy-${i}`}
-                x1={padL}
-                x2={padL + chartW}
-                y1={yFor(v)}
-                y2={yFor(v)}
-                stroke="var(--border)"
-                strokeWidth={1}
-                strokeDasharray={i === 0 ? '0' : '2 3'}
-              />
-            ))}
-
-            {/* label Y */}
-            {yTicks.map((v, i) => (
-              <text
-                key={`ty-${i}`}
-                x={padL + 2}
-                y={yFor(v) - 3}
-                fontSize="10"
-                fill="var(--text-3)"
-                style={{ fontFamily: 'var(--font-mono)' }}
-              >
-                {formatShort(v)}
-              </text>
-            ))}
-
-            {/* area antara nilai dan modal */}
-            {areaPath && (
-              <path
-                d={areaPath}
-                fill={last.pl >= 0 ? 'var(--income)' : 'var(--expense)'}
-                fillOpacity={0.08}
-                stroke="none"
-              />
-            )}
-
-            {/* garis modal (dashed) */}
-            <path
-              d={costPath}
-              fill="none"
-              stroke="var(--text-3)"
-              strokeWidth={1.5}
-              strokeDasharray="4 3"
-            />
-
-            {/* garis nilai */}
-            <path
-              d={valuePath}
-              fill="none"
-              stroke="var(--primary)"
-              strokeWidth={2}
-            />
-
-            {/* titik-titik nilai (filled market, hollow estimate) */}
-            {series.map((p, i) => {
-              const cx = xFor(i)
-              const cy = yFor(p.value)
-              const isMarket = p.quality === 'market'
-              return (
-                <circle
-                  key={`pt-${i}`}
-                  cx={cx}
-                  cy={cy}
-                  r={i === hoveredIdx ? 5 : 3.5}
-                  fill={isMarket ? 'var(--primary)' : 'var(--surface)'}
-                  stroke="var(--primary)"
-                  strokeWidth={1.5}
-                />
-              )
-            })}
-
-            {/* label X */}
-            {series.map((p, i) => {
-              if (i % xLabelStep !== 0 && i !== series.length - 1) return null
-              return (
-                <text
-                  key={`tx-${i}`}
-                  x={xFor(i)}
-                  y={H - 8}
-                  fontSize="10"
-                  textAnchor="middle"
-                  fill="var(--text-3)"
-                >
-                  {monthLabel(p.month)}
-                </text>
-              )
-            })}
-
-            {/* garis hover vertikal */}
-            {tip && (
-              <line
-                x1={tip.px}
-                x2={tip.px}
-                y1={padT}
-                y2={padT + chartH}
-                stroke="var(--text-3)"
-                strokeWidth={1}
-                strokeDasharray="2 2"
-                pointerEvents="none"
-              />
-            )}
-          </svg>
-        )}
-
-        {/* Tooltip HTML absolute */}
-        {tip && (
-          <div
-            data-testid="invest-tooltip"
-            style={{
-              position: 'absolute',
-              left: Math.min(Math.max(60, tip.px), Math.max(60, W - 60)),
-              top: Math.max(10, tip.py - 12),
-              transform: 'translate(-50%, -100%)',
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              boxShadow: 'var(--shadow-sm)',
-              padding: '8px 10px',
-              fontSize: 12,
-              pointerEvents: 'none',
-              minWidth: 140,
-              color: 'var(--text-1)',
-              zIndex: 1,
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>{tip.p.month}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-              <span className="muted">Nilai</span>
-              <span style={{ fontFamily: 'var(--font-mono)' }}>{idr(tip.p.value)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-              <span className="muted">Modal</span>
-              <span style={{ fontFamily: 'var(--font-mono)' }}>{idr(tip.p.cost)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-              <span className="muted">U/R</span>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  color: tip.p.pl >= 0 ? 'var(--income)' : 'var(--expense)',
-                  fontWeight: 600,
-                }}
-              >
-                {tip.p.pl >= 0 ? '+' : ''}
-                {idr(tip.p.pl)}
-              </span>
-            </div>
-            {tip.p.quality === 'estimate' && (
-              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                Perkiraan harga
+                  {last.pl >= 0 ? '+' : ''}{formatShort(last.pl)}
+                </span>
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Legenda + aksi tabel */}
+      {/* ── SELALU TAMPIL: Chip aset + chip periode */}
       <div
-        data-testid="invest-legend"
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginTop: 10,
+          gap: 12,
           flexWrap: 'wrap',
-          gap: 8,
+          marginBottom: 12,
+          alignItems: 'flex-start',
         }}
       >
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12 }}>
-          <span
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)' }}
-          >
-            <span
-              aria-hidden="true"
-              style={{
-                display: 'inline-block',
-                width: 14,
-                height: 2,
-                background: 'var(--primary)',
-                borderRadius: 1,
-              }}
+        {/* Chip aset — scrollable horizontal */}
+        <ChipBar>
+          <Chip
+            label="Semua"
+            active={filterAsset === 'all'}
+            onClick={() => setFilterAsset('all')}
+          />
+          {assets.map((a) => (
+            <Chip
+              key={a.id}
+              label={a.symbol}
+              active={filterAsset === a.id}
+              onClick={() => setFilterAsset(a.id)}
             />
-            Nilai
-          </span>
-          <span
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)' }}
-          >
-            <span
-              aria-hidden="true"
-              style={{
-                display: 'inline-block',
-                width: 14,
-                height: 0,
-                borderTop: '2px dashed var(--text-3)',
-              }}
-            />
-            Modal
-          </span>
-          {anyEstimate && (
-            <span className="muted" style={{ fontSize: 11 }}>
-              Titik berongga = perkiraan harga
-            </span>
-          )}
-          {!live && (
-            <span className="muted" style={{ fontSize: 11 }}>
-              Harga tidak live
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          className="btn-ghost"
-          onClick={() => setShowTable((v) => !v)}
+          ))}
+        </ChipBar>
+
+        {/* Chip periode */}
+        <div
+          role="radiogroup"
+          aria-label="Rentang waktu"
           style={{
-            minHeight: 32,
-            padding: '4px 12px',
-            fontSize: 12,
-            fontWeight: 500,
+            display: 'inline-flex',
+            gap: 2,
+            background: 'var(--surface-2)',
+            borderRadius: 'var(--radius-sm)',
+            padding: 2,
+            border: '1px solid var(--border)',
+            flexShrink: 0,
           }}
-          aria-expanded={showTable}
-          aria-controls="invest-table"
         >
-          {showTable ? 'Sembunyikan tabel' : 'Lihat tabel'}
-        </button>
+          {([6, 12, 'all'] as const).map((p) => {
+            const active = period === p
+            return (
+              <button
+                key={String(p)}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setPeriod(p)}
+                style={{
+                  minHeight: 30,
+                  padding: '3px 10px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: 'inherit',
+                  background: active ? 'var(--surface)' : 'transparent',
+                  color: active ? 'var(--text-1)' : 'var(--text-2)',
+                  border: active ? '1px solid var(--border)' : '1px solid transparent',
+                  borderRadius: 'calc(var(--radius-sm) - 2px)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap' as const,
+                }}
+              >
+                {p === 'all' ? 'Semua' : `${p}B`}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Tabel aksesibilitas */}
-      {showTable && (
+      {/* ── Area grafik — tinggi tetap, konten bervariasi */}
+      {noTradesAtAll && (
+        <EmptyChartArea height={H}>
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            Belum ada catatan investasi.
+          </p>
+          {onOpenDCA && (
+            <button
+              className="btn"
+              onClick={() => onOpenDCA()}
+              style={{ marginTop: 4 }}
+            >
+              Catat DCA pertama
+            </button>
+          )}
+        </EmptyChartArea>
+      )}
+
+      {noTradesForFilter && selectedAsset && (
+        <EmptyChartArea height={H}>
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            Belum ada catatan DCA untuk {selectedAsset.name}.
+          </p>
+          {onOpenDCA && (
+            <button
+              className="btn"
+              onClick={() => onOpenDCA(selectedAsset.id)}
+              style={{ marginTop: 4 }}
+            >
+              Catat DCA {selectedAsset.symbol}
+            </button>
+          )}
+        </EmptyChartArea>
+      )}
+
+      {/* Kosong karena filter 'all' tapi ada trades tapi series kosong (edge case) */}
+      {!noTradesAtAll && series.length === 0 && filterAsset === 'all' && (
+        <EmptyChartArea height={H}>
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            Belum ada data cukup untuk rentang yang dipilih.
+          </p>
+        </EmptyChartArea>
+      )}
+
+      {singlePoint && (
+        <EmptyChartArea height={H}>
+          <div
+            aria-hidden="true"
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: 'var(--primary)',
+              margin: '0 auto 6px',
+              flexShrink: 0,
+            }}
+          />
+          {last && (
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 14,
+                fontWeight: 600,
+                color: 'var(--text-1)',
+              }}
+            >
+              {formatShort(last.value)}
+            </div>
+          )}
+          <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+            Grafik akan terisi seiring bulan berjalan.
+          </p>
+        </EmptyChartArea>
+      )}
+
+      {hasChart && (
+        <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
+          {W > 0 && (
+            <svg
+              ref={svgRef}
+              width={W}
+              height={H}
+              viewBox={`0 0 ${W} ${H}`}
+              role="img"
+              tabIndex={0}
+              aria-label="Grafik perkembangan nilai dan modal portofolio"
+              onKeyDown={onSvgKey}
+              onPointerMove={(e) => setHoveredIdx(pointerToIdx(e.clientX))}
+              onPointerLeave={() => setHoveredIdx(null)}
+              style={{ display: 'block', outline: 'none', touchAction: 'pan-y' }}
+            >
+              {/* Grid Y */}
+              {yTicks.map((v, i) => (
+                <line
+                  key={`gy-${i}`}
+                  x1={padL} x2={padL + chartW}
+                  y1={yFor(v)} y2={yFor(v)}
+                  stroke="var(--border)"
+                  strokeWidth={1}
+                  strokeDasharray={i === 0 ? '0' : '2 3'}
+                />
+              ))}
+
+              {/* Label Y */}
+              {yTicks.map((v, i) => (
+                <text
+                  key={`ty-${i}`}
+                  x={padL + 2}
+                  y={yFor(v) - 3}
+                  fontSize="10"
+                  fill="var(--text-3)"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                >
+                  {formatShort(v)}
+                </text>
+              ))}
+
+              {/* Area antara Nilai dan Modal */}
+              {areaPath && (
+                <path
+                  d={areaPath}
+                  fill={last && last.pl >= 0 ? 'var(--income)' : 'var(--expense)'}
+                  fillOpacity={0.08}
+                  stroke="none"
+                />
+              )}
+
+              {/* Garis modal (dashed) */}
+              <path
+                d={costPath}
+                fill="none"
+                stroke="var(--text-3)"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+
+              {/* Garis nilai */}
+              <path
+                d={valuePath}
+                fill="none"
+                stroke="var(--primary)"
+                strokeWidth={2}
+              />
+
+              {/* Titik nilai */}
+              {series.map((p, i) => {
+                const cx = xFor(i)
+                const cy = yFor(p.value)
+                const isMarket = p.quality === 'market'
+                return (
+                  <circle
+                    key={`pt-${i}`}
+                    cx={cx} cy={cy}
+                    r={i === hoveredIdx ? 5 : 3.5}
+                    fill={isMarket ? 'var(--primary)' : 'var(--surface)'}
+                    stroke="var(--primary)"
+                    strokeWidth={1.5}
+                  />
+                )
+              })}
+
+              {/* Label X */}
+              {series.map((p, i) => {
+                if (i % xLabelStep !== 0 && i !== series.length - 1) return null
+                return (
+                  <text
+                    key={`tx-${i}`}
+                    x={xFor(i)}
+                    y={H - 8}
+                    fontSize="10"
+                    textAnchor="middle"
+                    fill="var(--text-3)"
+                  >
+                    {monthLbl(p.month)}
+                  </text>
+                )
+              })}
+
+              {/* Garis hover vertikal */}
+              {tip && (
+                <line
+                  x1={tip.px} x2={tip.px}
+                  y1={padT} y2={padT + chartH}
+                  stroke="var(--text-3)"
+                  strokeWidth={1}
+                  strokeDasharray="2 2"
+                  pointerEvents="none"
+                />
+              )}
+            </svg>
+          )}
+
+          {/* Tooltip HTML */}
+          {tip && (
+            <div
+              data-testid="invest-tooltip"
+              style={{
+                position: 'absolute',
+                left: Math.min(Math.max(60, tip.px), Math.max(60, W - 60)),
+                top: Math.max(10, tip.py - 12),
+                transform: 'translate(-50%, -100%)',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                boxShadow: 'var(--shadow-sm)',
+                padding: '8px 10px',
+                fontSize: 12,
+                pointerEvents: 'none',
+                minWidth: 140,
+                color: 'var(--text-1)',
+                zIndex: 1,
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{tip.p.month}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                <span className="muted">Nilai</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{idr(tip.p.value)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                <span className="muted">Modal</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{idr(tip.p.cost)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                <span className="muted">U/R</span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: tip.p.pl >= 0 ? 'var(--income)' : 'var(--expense)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {tip.p.pl >= 0 ? '+' : ''}{idr(tip.p.pl)}
+                </span>
+              </div>
+              {tip.p.quality === 'estimate' && (
+                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                  Perkiraan harga
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SELALU TAMPIL (bila ada data): Legenda + tombol tabel */}
+      {(hasChart || singlePoint) && (
         <div
-          id="invest-table"
-          style={{ overflowX: 'auto', marginTop: 12 }}
+          data-testid="invest-legend"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: 10,
+            flexWrap: 'wrap',
+            gap: 8,
+          }}
         >
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)' }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  display: 'inline-block',
+                  width: 14,
+                  height: 2,
+                  background: 'var(--primary)',
+                  borderRadius: 1,
+                }}
+              />
+              Nilai
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)' }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  display: 'inline-block',
+                  width: 14,
+                  height: 0,
+                  borderTop: '2px dashed var(--text-3)',
+                }}
+              />
+              Modal
+            </span>
+            {anyEstimate && (
+              <span className="muted" style={{ fontSize: 11 }}>
+                Titik berongga = perkiraan harga
+              </span>
+            )}
+            {!live && (
+              <span className="muted" style={{ fontSize: 11 }}>
+                Nilai bulan ini memakai harga tersimpan terakhir
+              </span>
+            )}
+          </div>
+          {hasChart && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setShowTable((v) => !v)}
+              style={{ minHeight: 32, padding: '4px 12px', fontSize: 12, fontWeight: 500 }}
+              aria-expanded={showTable}
+              aria-controls="invest-table"
+            >
+              {showTable ? 'Sembunyikan tabel' : 'Tampilkan tabel'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Tabel aksesibilitas */}
+      {showTable && hasChart && (
+        <div id="invest-table" style={{ overflowX: 'auto', marginTop: 12 }}>
           <table
             role="table"
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              fontSize: 12,
-              minWidth: 420,
-            }}
+            style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 420 }}
           >
             <thead>
               <tr>
@@ -685,23 +809,10 @@ export function InvestmentChart({
               {series.map((p) => (
                 <tr key={p.month} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: '6px 0' }}>{p.month}</td>
-                  <td
-                    style={{
-                      padding: '6px 0 6px 12px',
-                      textAlign: 'right',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
+                  <td style={{ padding: '6px 0 6px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
                     {formatShort(p.value)}
                   </td>
-                  <td
-                    style={{
-                      padding: '6px 0 6px 12px',
-                      textAlign: 'right',
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-2)',
-                    }}
-                  >
+                  <td style={{ padding: '6px 0 6px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-2)' }}>
                     {formatShort(p.cost)}
                   </td>
                   <td
@@ -712,16 +823,9 @@ export function InvestmentChart({
                       color: p.pl >= 0 ? 'var(--income)' : 'var(--expense)',
                     }}
                   >
-                    {p.pl >= 0 ? '+' : ''}
-                    {formatShort(p.pl)}
+                    {p.pl >= 0 ? '+' : ''}{formatShort(p.pl)}
                   </td>
-                  <td
-                    style={{
-                      padding: '6px 0 6px 12px',
-                      textAlign: 'right',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
+                  <td style={{ padding: '6px 0 6px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
                     {p.mom != null ? formatPercent(p.mom) : '-'}
                   </td>
                 </tr>
