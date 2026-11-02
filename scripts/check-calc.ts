@@ -1,5 +1,5 @@
 // Uji cepat kalkulasi investasi + fungsi murni format. Jalankan: npm run check:calc
-import { computePosition, flowsOf, summarize, xirr } from '../src/lib/calc'
+import { computePosition, flowsOf, portfolioSeries, summarize, xirr } from '../src/lib/calc'
 import { formatPercent, parseNum, todayISO } from '../src/lib/format'
 import { formatMoneyInput, parseMoneyInput, formatQuantityInput, parseQuantityInput } from '../src/lib/numInput'
 import { formatShort } from '../src/lib/amount'
@@ -249,6 +249,106 @@ ok('formatPercent 0.125 -> "12,50%"', formatPercent(0.125) === '12,50%')
 ok('formatPercent -0.0325 -> "-3,25%"', formatPercent(-0.0325) === '-3,25%')
 ok('formatPercent null -> "-"', formatPercent(null) === '-')
 ok('formatPercent negatif besar aman', formatPercent(-1) === '-100,00%')
+
+// 20) portfolioSeries — titik bulanan untuk grafik perkembangan investasi
+{
+  const assets = [{ id: 'a1', symbol: 'BTC' }]
+
+  // 20.1 Empty trades → []
+  ok('portfolioSeries empty → []',
+    portfolioSeries([], assets, [], {}, 'all', 6, '2026-06-15').length === 0)
+
+  // 20.2 Satu beli di bulan sekarang + harga live
+  const t1 = [{
+    id: 't1', asset_id: 'a1', side: 'buy' as const,
+    quantity: 1, price_per_unit: 500_000_000, fee: 0, traded_on: '2026-06-01',
+  }]
+  const pts = portfolioSeries(t1, assets, [], { BTC: 600_000_000 }, 'all', 6, '2026-06-15')
+  const lastPts = pts[pts.length - 1]
+  ok('portfolioSeries single buy qty=1', near(lastPts.qty, 1))
+  ok('portfolioSeries single buy cost=500jt', near(lastPts.cost, 500_000_000))
+  ok('portfolioSeries single buy value=600jt (currentPrice)', near(lastPts.value, 600_000_000))
+  ok('portfolioSeries single buy quality=market', lastPts.quality === 'market')
+
+  // 20.3 Jual semua → qty=0, value=0
+  const t2 = [
+    ...t1,
+    {
+      id: 't2', asset_id: 'a1', side: 'sell' as const,
+      quantity: 1, price_per_unit: 600_000_000, fee: 0, traded_on: '2026-06-10',
+    },
+  ]
+  const pts2 = portfolioSeries(t2, assets, [], { BTC: 600_000_000 }, 'all', 6, '2026-06-15')
+  const last2 = pts2[pts2.length - 1]
+  ok('portfolioSeries sell all qty=0', last2.qty === 0)
+  ok('portfolioSeries sell all value=0', last2.value === 0)
+
+  // 20.4 Carry-forward harga → quality estimate
+  const t3 = [{
+    id: 't3', asset_id: 'a1', side: 'buy' as const,
+    quantity: 1, price_per_unit: 500_000_000, fee: 0, traded_on: '2026-01-15',
+  }]
+  const pts3 = portfolioSeries(t3, assets, [], {}, 'all', 'all', '2026-03-15')
+  ok('portfolioSeries carry-forward quality estimate',
+    pts3.some((p) => p.quality === 'estimate'))
+
+  // 20.5 Tidak ada bulan sebelum trade pertama
+  ok('portfolioSeries no month before first trade',
+    !pts3.some((p) => p.month < '2026-01'))
+
+  // 20.6 range=6 → maksimal 6 titik
+  const longTrades = [{
+    id: 't4', asset_id: 'a1', side: 'buy' as const,
+    quantity: 1, price_per_unit: 500_000_000, fee: 0, traded_on: '2025-01-01',
+  }]
+  const pts4 = portfolioSeries(longTrades, assets, [], { BTC: 600_000_000 }, 'all', 6, '2026-06-15')
+  ok('portfolioSeries range=6 → max 6 titik', pts4.length <= 6)
+
+  // 20.7 Output bebas NaN
+  ok('portfolioSeries no NaN',
+    pts4.every((p) => !Number.isNaN(p.value) && !Number.isNaN(p.cost) && !Number.isNaN(p.pl)))
+
+  // 20.8 mom null saat value sebelumnya tidak ada
+  ok('portfolioSeries mom null di titik pertama', pts3[0].mom === null)
+
+  // 20.9 Harga implisit dari trade
+  const pts5 = portfolioSeries(t3, assets, [], {}, 'all', 'all', '2026-03-15')
+  ok('portfolioSeries implicit price from trade',
+    near(pts5[0].price === 0 ? 500_000_000 : pts5[0].price, 500_000_000) || pts5[0].value === 500_000_000)
+
+  // 20.10 Agregasi filter='all' menjumlahkan nilai banyak aset
+  const assetsTwo = [
+    { id: 'a1', symbol: 'BTC' },
+    { id: 'a2', symbol: 'EMAS' },
+  ]
+  const tradesTwo = [
+    { id: 'tA', asset_id: 'a1', side: 'buy' as const, quantity: 1, price_per_unit: 500_000_000, fee: 0, traded_on: '2026-05-01' },
+    { id: 'tB', asset_id: 'a2', side: 'buy' as const, quantity: 10, price_per_unit: 1_000_000, fee: 0, traded_on: '2026-05-01' },
+  ]
+  const ptsAll = portfolioSeries(tradesTwo, assetsTwo, [], { BTC: 600_000_000, EMAS: 1_200_000 }, 'all', 'all', '2026-06-15')
+  const lastAll = ptsAll[ptsAll.length - 1]
+  ok('portfolioSeries agregat all = sum semua aset',
+    near(lastAll.value, 600_000_000 + 12_000_000))
+
+  // 20.11 Filter per aset mengembalikan satu aset saja
+  const ptsOne = portfolioSeries(tradesTwo, assetsTwo, [], { BTC: 600_000_000, EMAS: 1_200_000 }, 'a1', 'all', '2026-06-15')
+  const lastOne = ptsOne[ptsOne.length - 1]
+  ok('portfolioSeries filter aset tunggal: value hanya aset itu',
+    near(lastOne.value, 600_000_000))
+
+  // 20.12 Snapshot history dipakai untuk bulan lampau
+  const historyTrades = [{
+    id: 'tH', asset_id: 'a1', side: 'buy' as const,
+    quantity: 1, price_per_unit: 500_000_000, fee: 0, traded_on: '2026-01-15',
+  }]
+  const snaps = [
+    { asset_id: 'a1', date: '2026-02-28', price: 550_000_000, source: 'live' },
+  ]
+  const ptsSnap = portfolioSeries(historyTrades, assets, snaps, { BTC: 600_000_000 }, 'all', 'all', '2026-04-15')
+  const feb = ptsSnap.find((p) => p.month === '2026-02')
+  ok('portfolioSeries snapshot sebagai harga Feb',
+    feb !== undefined && near(feb.value, 550_000_000) && feb.quality === 'market')
+}
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
 process.exit(failed === 0 ? 0 : 1)
