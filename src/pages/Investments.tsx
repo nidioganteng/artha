@@ -1,11 +1,13 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { usePortfolio, toLite } from '../lib/usePortfolio'
 import { computePosition } from '../lib/calc'
 import { dateLabel, formatPercent, idr, num, todayISO } from '../lib/format'
+import { getOrCreateSnapshotId } from '../lib/prices'
 import { Sheet, EmptyState, Field, AmountText, MoneyInput, QuantityInput, ConfirmDialog } from '../ui'
 import type { Trade } from '../lib/types'
+import { InvestmentChart } from '../ui/InvestmentChart'
 
 function plColor(n: number | null | undefined): string {
   if (n == null) return 'var(--text-2)'
@@ -51,7 +53,32 @@ function MetricCell({
 
 export default function Investments() {
   const { db, save, remove, failedIds } = useStore()
-  const { rows, total, live, at, loading, refresh } = usePortfolio()
+  const { rows, total, prices, live, at, loading, refresh } = usePortfolio()
+
+  // Simpan snapshot harga live sekali per aset per hari ke tabel price_snapshots
+  // supaya grafik perkembangan portofolio punya titik data per bulan.
+  const snapshotKeys = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!live) return
+    const today = todayISO()
+    for (const asset of db.assets) {
+      if (asset.price_source !== 'indodax' || !asset.price_ref) continue
+      const price = prices[asset.price_ref]
+      if (price == null || !Number.isFinite(price) || price <= 0) continue
+      const dedup = `${asset.id}:${today}`
+      if (snapshotKeys.current.has(dedup)) continue
+      snapshotKeys.current.add(dedup)
+      const id = getOrCreateSnapshotId(asset.id, today)
+      save('price_snapshots', {
+        id,
+        asset_id: asset.id,
+        date: today,
+        price,
+        source: 'live',
+        created_at: new Date().toISOString(),
+      })
+    }
+  }, [prices, live, db.assets, save])
 
   const [open, setOpen] = useState(false)
   const [editTrade, setEditTrade] = useState<Trade | null>(null)

@@ -5,6 +5,27 @@ export type PriceMap = Record<string, number>
 
 const KEY = 'kq:prices'
 
+/**
+ * ID stabil untuk snapshot harga (asset_id × tanggal) yang disimpan di
+ * localStorage. Dipakai agar panggilan `save('price_snapshots', ...)` berulang
+ * di hari yang sama cuma meng-upsert satu baris, bukan membuat baris baru.
+ *
+ * Tabel price_snapshots sudah punya UNIQUE (user_id, asset_id, date), jadi
+ * caching ID di client membuat upsert benar-benar idempotent di sisi server.
+ */
+export function getOrCreateSnapshotId(assetId: string, date: string): string {
+  const key = `artha:snapid:${assetId}:${date}`
+  try {
+    const existing = localStorage.getItem(key)
+    if (existing) return existing
+    const id = crypto.randomUUID()
+    localStorage.setItem(key, id)
+    return id
+  } catch {
+    return crypto.randomUUID()
+  }
+}
+
 interface Cached {
   prices: PriceMap
   at: string | null
