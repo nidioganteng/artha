@@ -385,6 +385,59 @@ async function runPlaywright() {
       }
     }
 
+    // ── Halaman Laporan (#lap) di 390/768/1440 ──
+    for (const w of [390, 768, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#lap`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(300)
+
+      const r = await p.evaluate(`(function() {
+        var page = document.querySelector('[data-testid="report-page"]');
+        var h1 = document.querySelector('h1');
+        var cards = document.querySelectorAll('[data-testid="report-page"] section.card');
+        return {
+          pageVisible: !!page,
+          titleOk: !!h1 && h1.textContent.trim() === 'Laporan',
+          cardCount: cards.length,
+        };
+      })()`) as { pageVisible: boolean; titleOk: boolean; cardCount: number }
+
+      check(`Report ${w}px: halaman #lap termuat`, r.pageVisible)
+      check(`Report ${w}px: judul "Laporan"`, r.titleOk)
+      check(`Report ${w}px: 4 kartu laporan tampil`, r.cardCount === 4, `cardCount=${r.cardCount}`)
+
+      // Konten tidak overflow: section.card tidak lebih lebar dari viewport
+      const overflow = await p.evaluate(`(function(vw) {
+        var cards = Array.from(document.querySelectorAll('[data-testid="report-page"] section.card'));
+        for (var i = 0; i < cards.length; i++) {
+          var rect = cards[i].getBoundingClientRect();
+          if (rect.right > vw + 1) return { ok: false, detail: 'card ' + i + ' right=' + Math.round(rect.right) + ' > vw=' + vw };
+        }
+        return { ok: true, detail: '' };
+      })(${w})`) as { ok: boolean; detail: string }
+      check(`Report ${w}px: kartu tidak overflow`, overflow.ok, overflow.detail)
+
+      await p.close()
+    }
+
+    // Dashboard: kartu Saldo Rekening tampil di 1440px
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 1440, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(300)
+
+      const found = await p.evaluate(`(function() {
+        var h2s = Array.from(document.querySelectorAll('h2'));
+        return h2s.some(function(h) { return h.textContent.trim() === 'Saldo Rekening'; });
+      })()`) as boolean
+      check('Dashboard 1440px: kartu Saldo Rekening tampil', found)
+      await p.close()
+    }
+
     // Tangkapan layar
     mkdirSync(QA_DIR, { recursive: true })
     console.log(`\n  Mengambil tangkapan layar ke docs/qa/verify/...`)
