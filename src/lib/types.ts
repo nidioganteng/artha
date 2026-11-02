@@ -51,6 +51,7 @@ export interface Trade {
   user_id: string
   asset_id: string
   platform_id: string | null
+  account_id?: string | null
   side: 'buy' | 'sell'
   quantity: number
   price_per_unit: number

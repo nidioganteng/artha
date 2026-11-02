@@ -97,6 +97,7 @@ create table if not exists public.trades (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   asset_id uuid not null references public.assets(id) on delete restrict,
   platform_id uuid references public.platforms(id) on delete set null,
+  account_id uuid references public.accounts(id) on delete restrict,
   side text not null default 'buy' check (side in ('buy','sell')),
   quantity numeric(28,10) not null check (quantity > 0),
   price_per_unit numeric(24,2) not null check (price_per_unit >= 0),
@@ -105,7 +106,10 @@ create table if not exists public.trades (
   note text,
   created_at timestamptz not null default now()
 );
+-- Idempotent: tambahkan kolom bila tabel sudah ada sebelum fitur ledger
+alter table public.trades add column if not exists account_id uuid references public.accounts(id) on delete restrict;
 create index if not exists trades_user_asset_idx on public.trades(user_id, asset_id, traded_on);
+create index if not exists trades_account_id_idx on public.trades(account_id);
 
 -- ---------- Row Level Security: setiap user hanya melihat datanya sendiri ----------
 do $$
