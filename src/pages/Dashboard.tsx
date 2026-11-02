@@ -3,7 +3,7 @@ import { m, useReducedMotion } from 'motion/react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { usePortfolio } from '../lib/usePortfolio'
-import { idr, monthKey, monthLabel, pct, shiftMonth, todayISO, dateLabel } from '../lib/format'
+import { formatPercent, idr, monthKey, monthLabel, shiftMonth, todayISO, dateLabel } from '../lib/format'
 import { formatShort } from '../lib/amount'
 import { accountBalance, monthReport, unassignedTrades } from '../lib/ledger'
 import { AlertTriangle } from 'lucide-react'
@@ -77,12 +77,14 @@ function KpiCard({
   token,
   sub,
   index,
+  testId,
 }: {
   label: string
   value: number
   token: string
   sub?: string
   index: number
+  testId?: string
 }) {
   const animated = useCountUp(value)
   const reduced = useReducedMotion()
@@ -90,6 +92,7 @@ function KpiCard({
     <m.div
       className="card bento-kpi"
       style={{ padding: 20 }}
+      data-testid={testId}
       initial={{ opacity: 0, y: reduced ? 0 : 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduced ? 0 : 0.3, delay: reduced ? 0 : index * 0.06, ease: 'easeOut' }}
@@ -207,6 +210,7 @@ function PortfolioStack({
   live,
   at,
   goto,
+  'data-testid': testId,
 }: {
   cards: PlatformCard[]
   totalValue: number
@@ -216,6 +220,7 @@ function PortfolioStack({
   live: boolean
   at: string | null
   goto: (tab: string) => void
+  'data-testid'?: string
 }) {
   const [activeIdx, setActiveIdx] = useState(0)
   const frontRef = useRef<HTMLDivElement>(null)
@@ -256,6 +261,7 @@ function PortfolioStack({
     return (
       <div
         className="card-hero bento-hero"
+        data-testid={testId}
         style={{
           padding: 32,
           minHeight: 200,
@@ -292,6 +298,7 @@ function PortfolioStack({
   return (
     <div
       className="bento-hero"
+      data-testid={testId}
       style={{ perspective: '900px', position: 'relative', paddingBottom: backCards.length > 0 ? 28 : 0 }}
       onTouchStart={(e) => { touchX.current = e.touches[0].clientX }}
       onTouchEnd={(e) => {
@@ -414,7 +421,7 @@ function PortfolioStack({
             <div>
               <div style={{ fontSize: 11, opacity: 0.7 }}>ROI</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14 }}>
-                {pct(roi)}
+                {formatPercent(roi)}
               </div>
             </div>
             <div>
@@ -514,7 +521,7 @@ function InvestmentSummary({
               color: (total.roi ?? 0) >= 0 ? 'var(--income)' : 'var(--expense)',
             }}
           >
-            {pct(total.roi)}
+            {formatPercent(total.roi)}
           </div>
         </div>
         <div>
@@ -527,7 +534,7 @@ function InvestmentSummary({
               color: (total.cagr ?? 0) >= 0 ? 'var(--income)' : 'var(--expense)',
             }}
           >
-            {pct(total.cagr)}
+            {formatPercent(total.cagr)}
           </div>
         </div>
       </div>
@@ -911,14 +918,13 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
   const isCurrentMonth = month === monthKey(todayISO())
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Month selector */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 20,
           gap: 12,
         }}
       >
@@ -975,20 +981,11 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
         </div>
       </div>
 
-      {/* Bento */}
+      {/* Bento — urutan DOM = urutan visual untuk screen reader dan Tab */}
       <div className="bento">
-        <KpiCard label="Pemasukan" value={m.income} token="var(--income)" index={0} />
-        <KpiCard label="Pengeluaran" value={m.expense} token="var(--expense)" index={1} />
-        <KpiCard label="Investasi (beli)" value={m.invest} token="var(--invest)" index={2} />
-        <KpiCard
-          label="Sisa bulan ini"
-          value={m.left}
-          token={m.left >= 0 ? 'var(--income)' : 'var(--expense)'}
-          sub="masuk - keluar - investasi"
-          index={3}
-        />
-
+        {/* 1. Kartu hero investasi + ringkasan (baris atas) */}
         <PortfolioStack
+          data-testid="dashboard-hero"
           cards={platformCards}
           totalValue={total.value}
           totalBought={total.totalBought}
@@ -1000,6 +997,21 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
         />
 
         <InvestmentSummary total={total} goto={goto} />
+
+        {/* 2. Empat KPI bulan ini */}
+        <KpiCard label="Pemasukan" value={m.income} token="var(--income)" index={0} testId="kpi-pemasukan" />
+        <KpiCard label="Pengeluaran" value={m.expense} token="var(--expense)" index={1} />
+        <KpiCard label="Investasi (beli)" value={m.invest} token="var(--invest)" index={2} />
+        <KpiCard
+          label="Sisa bulan ini"
+          value={m.left}
+          token={m.left >= 0 ? 'var(--income)' : 'var(--expense)'}
+          sub="masuk - keluar - investasi"
+          index={3}
+        />
+
+        {/* 3. Blok lainnya */}
+        <BalanceCard goto={goto} />
 
         {/* Bar chart card */}
         <div className="card bento-half">
@@ -1066,8 +1078,6 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
             </div>
           )}
         </div>
-
-        <BalanceCard goto={goto} />
 
         <RecentTx goto={goto} />
 

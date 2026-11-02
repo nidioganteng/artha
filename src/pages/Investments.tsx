@@ -3,7 +3,7 @@ import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight, Pencil, Trash2 } from 'lu
 import { useStore } from '../lib/store'
 import { usePortfolio, toLite } from '../lib/usePortfolio'
 import { computePosition } from '../lib/calc'
-import { dateLabel, idr, num, pct, todayISO } from '../lib/format'
+import { dateLabel, formatPercent, idr, num, todayISO } from '../lib/format'
 import { Sheet, EmptyState, Field, AmountText, MoneyInput, QuantityInput, ConfirmDialog } from '../ui'
 import type { Trade } from '../lib/types'
 
@@ -344,17 +344,17 @@ export default function Investments() {
                 amount={total.totalPL}
                 signed
                 color={plColor(total.totalPL)}
-                hint={pct(total.roi)}
+                hint={formatPercent(total.roi)}
               />
               <MetricCell
                 label="CAGR"
-                value={pct(total.cagr)}
+                value={formatPercent(total.cagr)}
                 color={plColor(total.cagr)}
                 hint={shortHistory && total.cagr != null ? 'kurang akurat < 1 thn' : undefined}
               />
               <MetricCell
                 label="XIRR (DCA)"
-                value={pct(total.xirr)}
+                value={formatPercent(total.xirr)}
                 color={plColor(total.xirr)}
               />
             </div>
@@ -406,10 +406,10 @@ export default function Investments() {
                     amount={p.totalPL}
                     signed
                     color={plColor(p.totalPL)}
-                    hint={pct(p.roi)}
+                    hint={formatPercent(p.roi)}
                   />
-                  <MetricCell label="CAGR" value={pct(p.cagr)} color={plColor(p.cagr)} />
-                  <MetricCell label="XIRR" value={pct(p.xirr)} color={plColor(p.xirr)} />
+                  <MetricCell label="CAGR" value={formatPercent(p.cagr)} color={plColor(p.cagr)} />
+                  <MetricCell label="XIRR" value={formatPercent(p.xirr)} color={plColor(p.xirr)} />
                   <MetricCell
                     label="Terealisasi"
                     amount={p.realized}
