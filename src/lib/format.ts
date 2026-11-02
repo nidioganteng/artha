@@ -52,6 +52,7 @@ export function parseNum(input: string, dotIsDecimal = false): number {
   let t = input.trim().replace(/\s/g, '')
   if (!t) return NaN
   if (t.includes(',') && t.includes('.')) t = t.replace(/\./g, '').replace(',', '.')
+  else if (/^-?[1-9]\d{0,2}(,\d{3})+$/.test(t)) t = t.replace(/,/g, '') // ribuan pakai koma (500,000)
   else if (t.includes(',')) t = t.replace(',', '.')
   else if (!dotIsDecimal && /^[1-9]\d{0,2}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '')
   return Number(t)

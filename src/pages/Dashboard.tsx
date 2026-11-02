@@ -5,6 +5,7 @@ import { useStore } from '../lib/store'
 import { usePortfolio } from '../lib/usePortfolio'
 import { idr, monthKey, monthLabel, pct, shiftMonth, todayISO, dateLabel } from '../lib/format'
 import { formatShort } from '../lib/amount'
+import { monthReport } from '../lib/ledger'
 
 // ──────────────────────────────────────────────────────
 // Hook: count-up
@@ -721,21 +722,24 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
   const [month, setMonth] = useState(() => monthKey(todayISO()))
 
   const m = useMemo(() => {
-    const tx = db.transactions.filter((t) => t.occurred_on.startsWith(month))
-    const income = tx.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0)
-    const expense = tx.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0)
-    const invest = db.trades
-      .filter((t) => t.side === 'buy' && t.traded_on.startsWith(month))
-      .reduce((s, t) => s + t.quantity * t.price_per_unit + t.fee, 0)
+    const report = monthReport(month, db.accounts, db.categories, db.transactions, db.trades)
 
     const byCat = new Map<string, number>()
-    for (const t of tx.filter((x) => x.kind === 'expense')) {
+    for (const t of db.transactions.filter(
+      (x) => x.kind === 'expense' && x.occurred_on.startsWith(month),
+    )) {
       const name = db.categories.find((c) => c.id === t.category_id)?.name ?? 'Tanpa kategori'
       byCat.set(name, (byCat.get(name) ?? 0) + t.amount)
     }
     const cats = [...byCat.entries()].sort((a, b) => b[1] - a[1]) as [string, number][]
 
-    return { income, expense, invest, left: income - expense - invest, cats }
+    return {
+      income: report.income,
+      expense: report.expense,
+      invest: report.investBuy,
+      left: report.net,
+      cats,
+    }
   }, [db, month])
 
   const barData = useMemo(
