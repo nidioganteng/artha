@@ -58,9 +58,31 @@ export default function Investments() {
   const [deleteTarget, setDeleteTarget] = useState<Trade | null>(null)
   const [assetId, setAssetId] = useState(() => db.assets[0]?.id ?? '')
   const [platformId, setPlatformId] = useState(() => db.platforms[0]?.id ?? '')
+
+  const readLastAccount = (): string => {
+    try {
+      return localStorage.getItem('artha:last_account') ?? ''
+    } catch {
+      return ''
+    }
+  }
+  const writeLastAccount = (id: string) => {
+    try {
+      localStorage.setItem('artha:last_account', id)
+    } catch {
+      // storage penuh / diblokir: abaikan
+    }
+  }
+
+  const [accountId, setAccountId] = useState<string>(() => {
+    const last = readLastAccount()
+    if (last && db.accounts.some((a) => a.id === last)) return last
+    return db.accounts[0]?.id ?? ''
+  })
   const effectiveAssetId = db.assets.find((a) => a.id === assetId)?.id ?? db.assets[0]?.id ?? ''
   const effectivePlatformId =
     db.platforms.find((p) => p.id === platformId)?.id ?? db.platforms[0]?.id ?? ''
+  const effectiveAccountId = db.accounts.find((a) => a.id === accountId)?.id ?? ''
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
   const [qtyVal, setQtyVal] = useState<number | null>(null)
   const [mode, setMode] = useState<'unit' | 'total'>('total')
@@ -79,14 +101,20 @@ export default function Investments() {
     setPriceVal(null)
     setFeeVal(null)
     setDate(todayISO())
+    // Pra-isi dari pilihan terakhir di localStorage
+    const last = readLastAccount()
+    if (last && db.accounts.some((a) => a.id === last)) setAccountId(last)
+    else if (!db.accounts.some((a) => a.id === accountId))
+      setAccountId(db.accounts[0]?.id ?? '')
     setFormError('')
     setOpen(true)
   }
 
-  function openEdit(t: Trade) {
+  function openEditTrade(t: Trade) {
     setEditTrade(t)
     setAssetId(t.asset_id)
     setPlatformId(t.platform_id ?? '')
+    setAccountId(t.account_id ?? '')
     setSide(t.side)
     setQtyVal(t.quantity)
     setMode('unit')
@@ -109,6 +137,16 @@ export default function Investments() {
     )
     if (f < 0) return setFormError('Biaya tidak valid.')
     const perUnit = mode === 'total' ? p / q : p
+
+    // Rekening wajib untuk catatan baru; saat edit, boleh kosong (migrasi dari data lama)
+    if (!editTrade && !effectiveAccountId) {
+      setFormError(
+        side === 'buy'
+          ? 'Pilih sumber dana (rekening) dulu.'
+          : 'Pilih rekening tujuan dulu.',
+      )
+      return
+    }
 
     if (editTrade) {
       // Validate that position won't go negative
@@ -142,6 +180,7 @@ export default function Investments() {
         ...editTrade,
         asset_id: effectiveAssetId,
         platform_id: effectivePlatformId || null,
+        account_id: effectiveAccountId || null,
         side,
         quantity: q,
         price_per_unit: perUnit,
@@ -153,6 +192,7 @@ export default function Investments() {
       save('trades', {
         asset_id: effectiveAssetId,
         platform_id: effectivePlatformId || null,
+        account_id: effectiveAccountId || null,
         side,
         quantity: q,
         price_per_unit: perUnit,
@@ -161,6 +201,7 @@ export default function Investments() {
         note: null,
       })
     }
+    if (effectiveAccountId) writeLastAccount(effectiveAccountId)
     setEditTrade(null)
     setOpen(false)
   }
@@ -519,6 +560,9 @@ export default function Investments() {
               history.map((t, i) => {
                 const a = db.assets.find((x) => x.id === t.asset_id)
                 const pl = db.platforms.find((x) => x.id === t.platform_id)?.name
+                const accName = t.account_id
+                  ? db.accounts.find((x) => x.id === t.account_id)?.name
+                  : null
                 const unsaved = failedIds.has(t.id)
                 const isBuy = t.side === 'buy'
                 return (
@@ -567,9 +611,32 @@ export default function Investments() {
                           </span>
                         )}
                       </div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        {dateLabel(t.traded_on)}
-                        {pl ? ` · ${pl}` : ''} · @ {idr(t.price_per_unit)}
+                      <div
+                        className="muted"
+                        style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+                      >
+                        <span>
+                          {dateLabel(t.traded_on)}
+                          {pl ? ` · ${pl}` : ''}
+                          {accName ? ` · ${isBuy ? 'dari' : 'ke'} ${accName}` : ''}
+                          {' · @ '}
+                          {idr(t.price_per_unit)}
+                        </span>
+                        {!accName && (
+                          <button
+                            type="button"
+                            className="chip chip-warn"
+                            onClick={() => openEditTrade(t)}
+                            style={{
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                            aria-label="Tentukan sumber dana"
+                          >
+                            Belum ditentukan
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div
@@ -587,7 +654,7 @@ export default function Investments() {
                     <button
                       className="btn-ghost"
                       aria-label="Edit catatan"
-                      onClick={() => openEdit(t)}
+                      onClick={() => openEditTrade(t)}
                       style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--text-2)' }}
                     >
                       <Pencil size={15} />
@@ -683,6 +750,27 @@ export default function Investments() {
                 </option>
               ))}
             </select>
+          </Field>
+
+          <Field label={side === 'buy' ? 'Sumber dana' : 'Masuk ke rekening'} htmlFor="inv-acc">
+            <select
+              id="inv-acc"
+              className="input"
+              value={effectiveAccountId}
+              onChange={(e) => setAccountId(e.target.value)}
+            >
+              <option value="">Belum ditentukan</option>
+              {db.accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            {db.accounts.length === 0 && (
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Belum ada rekening. Tambahkan di Pengaturan.
+              </p>
+            )}
           </Field>
 
           <Field label={`Jumlah didapat (${asset?.unit ?? 'unit'})`} htmlFor="inv-qty">
