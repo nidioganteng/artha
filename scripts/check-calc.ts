@@ -2,6 +2,7 @@
 import { computePosition, flowsOf, summarize, xirr } from '../src/lib/calc'
 import { parseNum, todayISO } from '../src/lib/format'
 import { formatMoneyInput, parseMoneyInput, formatQuantityInput, parseQuantityInput } from '../src/lib/numInput'
+import { formatShort } from '../src/lib/amount'
 
 let failed = 0
 function ok(name: string, cond: boolean, detail = '') {
@@ -145,6 +146,13 @@ ok('parse qty "7" -> 7', parseQuantityInput('7') === 7)
 // 15) Round trip
 ok('round trip money 1500000', parseMoneyInput(formatMoneyInput('1500000')) === 1500000)
 ok('round trip qty 0.00012345', parseQuantityInput(formatQuantityInput('0.00012345', 8)) === 0.00012345)
+
+// 16) formatShort — singkatan nominal
+ok('formatShort 1500000 → "Rp 1,5 Jt"', formatShort(1500000) === 'Rp 1,5 Jt')
+ok('formatShort 1000000 → "Rp 1 Jt"', formatShort(1000000) === 'Rp 1 Jt')
+ok('formatShort 2340000000 → "Rp 2,34 M"', formatShort(2340000000) === 'Rp 2,34 M')
+ok('formatShort 950000 < 1 Jt, bukan singkatan', !formatShort(950000).includes('Jt') && formatShort(950000).includes('950'))
+ok('formatShort -1500000 negatif aman', formatShort(-1500000) === '-Rp 1,5 Jt')
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
 process.exit(failed === 0 ? 0 : 1)
