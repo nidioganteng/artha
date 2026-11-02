@@ -16,6 +16,7 @@ export const NUMERIC: Record<TableName, string[]> = {
   trades: ['quantity', 'price_per_unit', 'fee'],
   recurring_rules: ['amount', 'day_of_month'],
   recurring_checks: [],
+  price_snapshots: ['price'],
 }
 
 export const isNetworkError = (msg: string) =>
@@ -68,6 +69,7 @@ export function emptyDB(): DB {
     trades: [],
     recurring_rules: [],
     recurring_checks: [],
+    price_snapshots: [],
   }
 }
 

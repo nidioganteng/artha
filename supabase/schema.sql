@@ -91,6 +91,22 @@ create table if not exists public.assets (
   created_at timestamptz not null default now()
 );
 
+-- Riwayat harga aset per tanggal — dipakai untuk grafik perkembangan portofolio.
+-- source: 'live' = diambil dari /api/prices saat buka halaman,
+--         'manual' = diisi user, 'history' = backfill dari sumber lain.
+create table if not exists public.price_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  asset_id uuid not null references public.assets(id) on delete cascade,
+  date date not null,
+  price numeric(24,2) not null,
+  source text not null check (source in ('live','manual','history')),
+  created_at timestamptz not null default now(),
+  unique (user_id, asset_id, date)
+);
+create index if not exists price_snapshots_asset_date_idx
+  on public.price_snapshots (asset_id, date);
+
 -- Setiap pembelian DCA / penjualan adalah satu baris trade
 create table if not exists public.trades (
   id uuid primary key default gen_random_uuid(),
@@ -117,7 +133,7 @@ declare t text;
 begin
   foreach t in array array[
     'accounts','categories','transactions','recurring_rules',
-    'recurring_checks','platforms','assets','trades'
+    'recurring_checks','platforms','assets','trades','price_snapshots'
   ] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "own rows" on public.%I', t);

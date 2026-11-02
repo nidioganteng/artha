@@ -18,6 +18,7 @@ const TABLE_LABEL: Record<TableName, string> = {
   trades: 'Catatan investasi',
   recurring_rules: 'Aturan rutin',
   recurring_checks: 'Centang rutin',
+  price_snapshots: 'Snapshot harga',
 }
 
 function opLabel(f: FailedOp): string {
