@@ -1,10 +1,13 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { usePortfolio, toLite } from '../lib/usePortfolio'
 import { computePosition } from '../lib/calc'
-import { dateLabel, idr, num, parseNum, pct, todayISO } from '../lib/format'
-import { Sheet, EmptyState, Field, AmountText } from '../ui'
+import { dateLabel, formatPercent, idr, num, todayISO } from '../lib/format'
+import { getOrCreateSnapshotId } from '../lib/prices'
+import { Sheet, EmptyState, Field, AmountText, MoneyInput, QuantityInput, ConfirmDialog } from '../ui'
+import type { Trade } from '../lib/types'
+import { InvestmentChart } from '../ui/InvestmentChart'
 
 function plColor(n: number | null | undefined): string {
   if (n == null) return 'var(--text-2)'
@@ -50,69 +53,199 @@ function MetricCell({
 
 export default function Investments() {
   const { db, save, remove, failedIds } = useStore()
-  const { rows, total, live, at, loading, refresh } = usePortfolio()
+  const { rows, total, prices, live, at, loading, refresh } = usePortfolio()
+
+  // Simpan snapshot harga live sekali per aset per hari ke tabel price_snapshots
+  // supaya grafik perkembangan portofolio punya titik data per bulan.
+  const snapshotKeys = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!live) return
+    const today = todayISO()
+    for (const asset of db.assets) {
+      if (asset.price_source !== 'indodax' || !asset.price_ref) continue
+      const price = prices[asset.price_ref]
+      if (price == null || !Number.isFinite(price) || price <= 0) continue
+      const dedup = `${asset.id}:${today}`
+      if (snapshotKeys.current.has(dedup)) continue
+      snapshotKeys.current.add(dedup)
+      const id = getOrCreateSnapshotId(asset.id, today)
+      save('price_snapshots', {
+        id,
+        asset_id: asset.id,
+        date: today,
+        price,
+        source: 'live',
+        created_at: new Date().toISOString(),
+      })
+    }
+  }, [prices, live, db.assets, save])
 
   const [open, setOpen] = useState(false)
+  const [editTrade, setEditTrade] = useState<Trade | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Trade | null>(null)
   const [assetId, setAssetId] = useState(() => db.assets[0]?.id ?? '')
   const [platformId, setPlatformId] = useState(() => db.platforms[0]?.id ?? '')
+
+  const readLastAccount = (): string => {
+    try {
+      return localStorage.getItem('artha:last_account') ?? ''
+    } catch {
+      return ''
+    }
+  }
+  const writeLastAccount = (id: string) => {
+    try {
+      localStorage.setItem('artha:last_account', id)
+    } catch {
+      // storage penuh / diblokir: abaikan
+    }
+  }
+
+  const [accountId, setAccountId] = useState<string>(() => {
+    const last = readLastAccount()
+    if (last && db.accounts.some((a) => a.id === last)) return last
+    return db.accounts[0]?.id ?? ''
+  })
   const effectiveAssetId = db.assets.find((a) => a.id === assetId)?.id ?? db.assets[0]?.id ?? ''
   const effectivePlatformId =
     db.platforms.find((p) => p.id === platformId)?.id ?? db.platforms[0]?.id ?? ''
+  const effectiveAccountId = db.accounts.find((a) => a.id === accountId)?.id ?? ''
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
-  const [qty, setQty] = useState('')
+  const [qtyVal, setQtyVal] = useState<number | null>(null)
   const [mode, setMode] = useState<'unit' | 'total'>('total')
-  const [priceIn, setPriceIn] = useState('')
-  const [fee, setFee] = useState('')
+  const [priceVal, setPriceVal] = useState<number | null>(null)
+  const [feeVal, setFeeVal] = useState<number | null>(null)
   const [date, setDate] = useState(todayISO())
   const [formError, setFormError] = useState('')
-  const [manual, setManual] = useState<Record<string, string>>({})
+  const [manualVal, setManualVal] = useState<Record<string, number | null>>({})
 
   const asset = db.assets.find((a) => a.id === effectiveAssetId)
+  const maxDecimals = asset?.asset_type === 'gold' ? 4 : 8
 
   function openAdd() {
-    setQty('')
-    setPriceIn('')
-    setFee('')
+    setEditTrade(null)
+    setQtyVal(null)
+    setPriceVal(null)
+    setFeeVal(null)
     setDate(todayISO())
+    // Pra-isi dari pilihan terakhir di localStorage
+    const last = readLastAccount()
+    if (last && db.accounts.some((a) => a.id === last)) setAccountId(last)
+    else if (!db.accounts.some((a) => a.id === accountId))
+      setAccountId(db.accounts[0]?.id ?? '')
+    setFormError('')
+    setOpen(true)
+  }
+
+  function openEditTrade(t: Trade) {
+    setEditTrade(t)
+    setAssetId(t.asset_id)
+    setPlatformId(t.platform_id ?? '')
+    setAccountId(t.account_id ?? '')
+    setSide(t.side)
+    setQtyVal(t.quantity)
+    setMode('unit')
+    setPriceVal(t.price_per_unit)
+    setFeeVal(t.fee || null)
+    setDate(t.traded_on)
     setFormError('')
     setOpen(true)
   }
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    const q = parseNum(qty, true)
-    const p = parseNum(priceIn)
-    const f = fee.trim() ? parseNum(fee) : 0
+    const q = qtyVal ?? 0
+    const p = priceVal ?? 0
+    const f = feeVal ?? 0
     if (!asset) return setFormError('Pilih aset dulu (tambahkan di Pengaturan bila belum ada).')
-    if (!Number.isFinite(q) || q <= 0) return setFormError('Jumlah unit harus lebih dari 0.')
-    if (!Number.isFinite(p) || p < 0)
-      return setFormError(
-        mode === 'total' ? 'Total Rp tidak valid.' : 'Harga per unit tidak valid.',
-      )
-    if (!Number.isFinite(f) || f < 0) return setFormError('Biaya tidak valid.')
+    if (q <= 0) return setFormError('Jumlah unit harus lebih dari 0.')
+    if (p < 0) return setFormError(
+      mode === 'total' ? 'Total Rp tidak valid.' : 'Harga per unit tidak valid.',
+    )
+    if (f < 0) return setFormError('Biaya tidak valid.')
     const perUnit = mode === 'total' ? p / q : p
-    setFormError('')
-    save('trades', {
-      asset_id: effectiveAssetId,
-      platform_id: effectivePlatformId || null,
-      side,
-      quantity: q,
-      price_per_unit: perUnit,
-      fee: f,
-      traded_on: date,
-      note: null,
-    })
+
+    // Rekening wajib untuk catatan baru; saat edit, boleh kosong (migrasi dari data lama)
+    if (!editTrade && !effectiveAccountId) {
+      setFormError(
+        side === 'buy'
+          ? 'Pilih sumber dana (rekening) dulu.'
+          : 'Pilih rekening tujuan dulu.',
+      )
+      return
+    }
+
+    if (editTrade) {
+      // Validate that position won't go negative
+      const otherTrades = db.trades.filter(
+        (t) => t.asset_id === effectiveAssetId && t.id !== editTrade.id,
+      )
+      const newTrade = {
+        ...editTrade,
+        side,
+        quantity: q,
+        price_per_unit: perUnit,
+        fee: f,
+        traded_on: date,
+      }
+      const allTrades = [...otherTrades, newTrade].sort((a, b) =>
+        a.traded_on.localeCompare(b.traded_on),
+      )
+      let running = 0
+      for (const t of allTrades) {
+        if (t.side === 'buy') running += t.quantity
+        else running -= t.quantity
+        if (running < -0.000001) {
+          setFormError(
+            'Perubahan ini akan membuat posisi aset menjadi negatif. Periksa kembali jumlah dan jenis transaksi.',
+          )
+          return
+        }
+      }
+      setFormError('')
+      save('trades', {
+        ...editTrade,
+        asset_id: effectiveAssetId,
+        platform_id: effectivePlatformId || null,
+        account_id: effectiveAccountId || null,
+        side,
+        quantity: q,
+        price_per_unit: perUnit,
+        fee: f,
+        traded_on: date,
+      })
+    } else {
+      setFormError('')
+      save('trades', {
+        asset_id: effectiveAssetId,
+        platform_id: effectivePlatformId || null,
+        account_id: effectiveAccountId || null,
+        side,
+        quantity: q,
+        price_per_unit: perUnit,
+        fee: f,
+        traded_on: date,
+        note: null,
+      })
+    }
+    if (effectiveAccountId) writeLastAccount(effectiveAccountId)
+    setEditTrade(null)
     setOpen(false)
   }
 
   function saveManual(id: string) {
-    const v = parseNum(manual[id] ?? '')
-    if (!Number.isFinite(v) || v < 0) return
+    const v = manualVal[id]
+    if (v == null || v <= 0) return
     const a = db.assets.find((x) => x.id === id)
     if (!a) return
     save('assets', { ...a, manual_price: v, manual_price_at: new Date().toISOString() })
-    setManual((m) => ({ ...m, [id]: '' }))
+    setManualVal((m) => ({ ...m, [id]: null }))
   }
+
+  // Total Rp saat mode = harga per unit
+  const unitTotal = mode === 'unit' && qtyVal != null && priceVal != null && qtyVal > 0 && priceVal > 0
+    ? qtyVal * priceVal
+    : null
 
   const byPlatform = useMemo(() => {
     const out: {
@@ -198,6 +331,21 @@ export default function Investments() {
         {at ? ` Diperbarui ${new Date(at).toLocaleString('id-ID')}.` : ''}
       </p>
 
+      {/* Grafik perkembangan — selalu ditampilkan (punya empty state sendiri) */}
+      <div style={{ marginBottom: 16 }}>
+        <InvestmentChart
+          trades={db.trades}
+          assets={db.assets}
+          priceHistory={db.price_snapshots}
+          currentPrices={prices}
+          live={live}
+          onOpenDCA={(assetId) => {
+            if (assetId) setAssetId(assetId)
+            openAdd()
+          }}
+        />
+      </div>
+
       {rows.length === 0 ? (
         <EmptyState
           title="Belum ada aset"
@@ -238,17 +386,17 @@ export default function Investments() {
                 amount={total.totalPL}
                 signed
                 color={plColor(total.totalPL)}
-                hint={pct(total.roi)}
+                hint={formatPercent(total.roi)}
               />
               <MetricCell
                 label="CAGR"
-                value={pct(total.cagr)}
+                value={formatPercent(total.cagr)}
                 color={plColor(total.cagr)}
                 hint={shortHistory && total.cagr != null ? 'kurang akurat < 1 thn' : undefined}
               />
               <MetricCell
                 label="XIRR (DCA)"
-                value={pct(total.xirr)}
+                value={formatPercent(total.xirr)}
                 color={plColor(total.xirr)}
               />
             </div>
@@ -300,10 +448,10 @@ export default function Investments() {
                     amount={p.totalPL}
                     signed
                     color={plColor(p.totalPL)}
-                    hint={pct(p.roi)}
+                    hint={formatPercent(p.roi)}
                   />
-                  <MetricCell label="CAGR" value={pct(p.cagr)} color={plColor(p.cagr)} />
-                  <MetricCell label="XIRR" value={pct(p.xirr)} color={plColor(p.xirr)} />
+                  <MetricCell label="CAGR" value={formatPercent(p.cagr)} color={plColor(p.cagr)} />
+                  <MetricCell label="XIRR" value={formatPercent(p.xirr)} color={plColor(p.xirr)} />
                   <MetricCell
                     label="Terealisasi"
                     amount={p.realized}
@@ -313,14 +461,13 @@ export default function Investments() {
                 </div>
                 {a.price_source === 'manual' && (
                   <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-                    <input
-                      className="input"
-                      inputMode="decimal"
-                      placeholder={`Harga per ${a.unit} hari ini (Rp)`}
-                      value={manual[a.id] ?? ''}
-                      onChange={(e) => setManual((m) => ({ ...m, [a.id]: e.target.value }))}
-                      style={{ flex: 1 }}
-                    />
+                    <div style={{ flex: 1 }}>
+                      <MoneyInput
+                        value={manualVal[a.id] ?? null}
+                        onValueChange={(v) => setManualVal((m) => ({ ...m, [a.id]: v }))}
+                        placeholder={`Harga per ${a.unit}`}
+                      />
+                    </div>
                     <button className="btn" type="button" onClick={() => saveManual(a.id)}>
                       Simpan
                     </button>
@@ -455,6 +602,9 @@ export default function Investments() {
               history.map((t, i) => {
                 const a = db.assets.find((x) => x.id === t.asset_id)
                 const pl = db.platforms.find((x) => x.id === t.platform_id)?.name
+                const accName = t.account_id
+                  ? db.accounts.find((x) => x.id === t.account_id)?.name
+                  : null
                 const unsaved = failedIds.has(t.id)
                 const isBuy = t.side === 'buy'
                 return (
@@ -463,7 +613,7 @@ export default function Investments() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 12,
+                      gap: 8,
                       padding: '12px 16px',
                       borderTop: i > 0 ? '1px solid var(--border)' : 'none',
                       opacity: unsaved ? 0.6 : 1,
@@ -496,16 +646,39 @@ export default function Investments() {
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {isBuy ? 'Beli' : 'Jual'} {num(t.quantity)} {a?.unit ?? ''} {a?.symbol ?? ''}
+                        {isBuy ? 'Beli' : 'Jual'} {num(t.quantity)} {a?.symbol ?? a?.unit ?? ''}
                         {unsaved && (
                           <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--warn)' }}>
                             belum tersimpan
                           </span>
                         )}
                       </div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        {dateLabel(t.traded_on)}
-                        {pl ? ` · ${pl}` : ''} · @ {idr(t.price_per_unit)}
+                      <div
+                        className="muted"
+                        style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+                      >
+                        <span>
+                          {dateLabel(t.traded_on)}
+                          {pl ? ` · ${pl}` : ''}
+                          {accName ? ` · ${isBuy ? 'dari' : 'ke'} ${accName}` : ''}
+                          {' · @ '}
+                          {idr(t.price_per_unit)}
+                        </span>
+                        {!accName && (
+                          <button
+                            type="button"
+                            className="chip chip-warn"
+                            onClick={() => openEditTrade(t)}
+                            style={{
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                            aria-label="Tentukan sumber dana"
+                          >
+                            Belum ditentukan
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div
@@ -522,13 +695,19 @@ export default function Investments() {
                     </div>
                     <button
                       className="btn-ghost"
-                      aria-label="Hapus catatan"
-                      style={{ padding: 8, minHeight: 36, minWidth: 36, border: 'none' }}
-                      onClick={() => {
-                        if (confirm('Hapus catatan ini?')) remove('trades', t.id)
-                      }}
+                      aria-label="Edit catatan"
+                      onClick={() => openEditTrade(t)}
+                      style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--text-2)' }}
                     >
-                      ✕
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      className="btn-ghost"
+                      aria-label="Hapus catatan"
+                      onClick={() => setDeleteTarget(t)}
+                      style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--expense)' }}
+                    >
+                      <Trash2 size={15} />
                     </button>
                   </div>
                 )
@@ -538,14 +717,16 @@ export default function Investments() {
         </>
       )}
 
-      {/* Sheet: Catat DCA */}
+      {/* Sheet: Catat DCA / Edit */}
       <Sheet
         open={open}
-        onClose={() => setOpen(false)}
-        title="Catat DCA / Jual"
+        onClose={() => { setOpen(false); setEditTrade(null) }}
+        title={editTrade
+          ? (editTrade.side === 'buy' ? 'Edit Catatan DCA' : 'Edit Catatan Jual')
+          : 'Catat DCA / Jual'}
         footer={
           <button type="submit" form="form-inv" className="btn" style={{ width: '100%' }}>
-            Simpan
+            {editTrade ? 'Simpan Perubahan' : 'Simpan'}
           </button>
         }
       >
@@ -587,6 +768,7 @@ export default function Investments() {
               className="input"
               value={effectiveAssetId}
               onChange={(e) => setAssetId(e.target.value)}
+              disabled={!!editTrade}
             >
               {db.assets.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -612,14 +794,34 @@ export default function Investments() {
             </select>
           </Field>
 
-          <Field label={`Jumlah didapat (${asset?.unit ?? 'unit'})`} htmlFor="inv-qty">
-            <input
-              id="inv-qty"
+          <Field label={side === 'buy' ? 'Sumber dana' : 'Masuk ke rekening'} htmlFor="inv-acc">
+            <select
+              id="inv-acc"
               className="input"
-              inputMode="decimal"
-              placeholder="0.00012345"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
+              value={effectiveAccountId}
+              onChange={(e) => setAccountId(e.target.value)}
+            >
+              <option value="">Belum ditentukan</option>
+              {db.accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            {db.accounts.length === 0 && (
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Belum ada rekening. Tambahkan di Pengaturan.
+              </p>
+            )}
+          </Field>
+
+          <Field label={`Jumlah didapat (${asset?.unit ?? 'unit'})`} htmlFor="inv-qty">
+            <QuantityInput
+              id="inv-qty"
+              value={qtyVal}
+              onValueChange={setQtyVal}
+              maxDecimals={maxDecimals}
+              placeholder="0,00012345"
             />
           </Field>
 
@@ -627,14 +829,17 @@ export default function Investments() {
             label={mode === 'total' ? 'Total yang dibayar (Rp)' : 'Harga per unit (Rp)'}
             htmlFor="inv-px"
           >
-            <input
+            <MoneyInput
               id="inv-px"
-              className="input"
-              inputMode="decimal"
+              value={priceVal}
+              onValueChange={setPriceVal}
               placeholder={mode === 'total' ? '500.000' : '800.000.000'}
-              value={priceIn}
-              onChange={(e) => setPriceIn(e.target.value)}
             />
+            {unitTotal != null && (
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Total: {idr(unitTotal)}
+              </p>
+            )}
             <button
               type="button"
               style={{
@@ -648,20 +853,18 @@ export default function Investments() {
                 textDecoration: 'underline',
                 fontFamily: 'inherit',
               }}
-              onClick={() => setMode(mode === 'total' ? 'unit' : 'total')}
+              onClick={() => { setMode(mode === 'total' ? 'unit' : 'total'); setPriceVal(null) }}
             >
               {mode === 'total' ? 'Isi harga per unit saja' : 'Isi total Rp saja'}
             </button>
           </Field>
 
           <Field label="Biaya / fee (Rp, opsional)" htmlFor="inv-fee">
-            <input
+            <MoneyInput
               id="inv-fee"
-              className="input"
-              inputMode="decimal"
+              value={feeVal}
+              onValueChange={setFeeVal}
               placeholder="0"
-              value={fee}
-              onChange={(e) => setFee(e.target.value)}
             />
           </Field>
 
@@ -681,6 +884,18 @@ export default function Investments() {
 
         </form>
       </Sheet>
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Hapus Catatan"
+        message="Hapus catatan investasi ini?"
+        onConfirm={() => {
+          if (deleteTarget) remove('trades', deleteTarget.id)
+          setDeleteTarget(null)
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

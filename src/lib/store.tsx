@@ -27,7 +27,16 @@ const TABLES: TableName[] = [
   'trades',
   'recurring_rules',
   'recurring_checks',
+  'price_snapshots',
 ]
+
+// Tabel yang kalau belum ada di database tidak mematikan aplikasi — cukup pakai
+// array kosong. Dipakai untuk migrasi lunak: fitur baru bisa dideploy sebelum
+// user menjalankan migrasi SQL-nya.
+const OPTIONAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['price_snapshots'])
+
+const isMissingRelationError = (msg: string) =>
+  /relation .* does not exist|could not find the table|schema cache/i.test(msg)
 
 function readJSON<T>(key: string, fallback: T): T {
   try {
@@ -155,6 +164,18 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
           break
         }
 
+        // Tabel opsional yang belum ada: perlakukan sebagai sukses lokal.
+        // Op dikeluarkan dari antrean, serverRef diperbarui, tidak dimarkah gagal.
+        if (msg && OPTIONAL_TABLES.has(op.table) && isMissingRelationError(msg)) {
+          queueRef.current.shift()
+          serverRef.current = applyOp(serverRef.current, op)
+          writeJSON(cacheKey, serverRef.current)
+          versionRef.current++
+          persistQueue()
+          rebuild()
+          continue
+        }
+
         queueRef.current.shift()
         if (!msg) {
           // Sukses: perbarui snapshot server agar rebuild tidak kehilangan baris
@@ -190,7 +211,19 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
     const snap = versionRef.current
     const results = await Promise.all(TABLES.map((t) => supabase.from(t).select('*')))
     if (versionRef.current !== snap) return
-    const bad = results.find((r) => r.error)
+    // Error dari tabel opsional yang belum ada di DB (mis. price_snapshots sebelum
+    // migrasi dijalankan) tidak fatal — abaikan dan pakai array kosong.
+    const bad = results.find((r, i) => {
+      if (!r.error) return false
+      const table = TABLES[i]
+      if (OPTIONAL_TABLES.has(table) && isMissingRelationError(r.error.message)) {
+        if (typeof console !== 'undefined') {
+          console.warn(`[store] tabel ${table} belum ada di database, dilewati.`)
+        }
+        return false
+      }
+      return true
+    })
     if (bad?.error) {
       setReady(true)
       if (!isNetworkError(bad.error.message)) setError(bad.error.message)
@@ -198,7 +231,12 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
     }
     const fresh = emptyDB()
     TABLES.forEach((t, i) => {
-      const rows = (results[i].data ?? []) as Record<string, unknown>[]
+      const r = results[i]
+      if (r.error) {
+        // Tabel opsional yang tidak ada: lewati, biarkan array kosong
+        return
+      }
+      const rows = (r.data ?? []) as Record<string, unknown>[]
       ;(fresh as unknown as Record<string, unknown>)[t] = normalize(t, rows)
     })
     serverRef.current = fresh

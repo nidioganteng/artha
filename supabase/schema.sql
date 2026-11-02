@@ -91,12 +91,29 @@ create table if not exists public.assets (
   created_at timestamptz not null default now()
 );
 
+-- Riwayat harga aset per tanggal — dipakai untuk grafik perkembangan portofolio.
+-- source: 'live' = diambil dari /api/prices saat buka halaman,
+--         'manual' = diisi user, 'history' = backfill dari sumber lain.
+create table if not exists public.price_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  asset_id uuid not null references public.assets(id) on delete cascade,
+  date date not null,
+  price numeric(24,2) not null,
+  source text not null check (source in ('live','manual','history')),
+  created_at timestamptz not null default now(),
+  unique (user_id, asset_id, date)
+);
+create index if not exists price_snapshots_asset_date_idx
+  on public.price_snapshots (asset_id, date);
+
 -- Setiap pembelian DCA / penjualan adalah satu baris trade
 create table if not exists public.trades (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   asset_id uuid not null references public.assets(id) on delete restrict,
   platform_id uuid references public.platforms(id) on delete set null,
+  account_id uuid references public.accounts(id) on delete restrict,
   side text not null default 'buy' check (side in ('buy','sell')),
   quantity numeric(28,10) not null check (quantity > 0),
   price_per_unit numeric(24,2) not null check (price_per_unit >= 0),
@@ -105,7 +122,10 @@ create table if not exists public.trades (
   note text,
   created_at timestamptz not null default now()
 );
+-- Idempotent: tambahkan kolom bila tabel sudah ada sebelum fitur ledger
+alter table public.trades add column if not exists account_id uuid references public.accounts(id) on delete restrict;
 create index if not exists trades_user_asset_idx on public.trades(user_id, asset_id, traded_on);
+create index if not exists trades_account_id_idx on public.trades(account_id);
 
 -- ---------- Row Level Security: setiap user hanya melihat datanya sendiri ----------
 do $$
@@ -113,7 +133,7 @@ declare t text;
 begin
   foreach t in array array[
     'accounts','categories','transactions','recurring_rules',
-    'recurring_checks','platforms','assets','trades'
+    'recurring_checks','platforms','assets','trades','price_snapshots'
   ] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "own rows" on public.%I', t);

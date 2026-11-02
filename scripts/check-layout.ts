@@ -82,6 +82,43 @@ check('CSS: .sheet-dialog base tanpa display', !baseBlock.includes('display'),
 check('CSS: .sheet-dialog[open] ada dengan display',
   css.includes('.sheet-dialog[open]') && /\.sheet-dialog\[open\]\s*\{[^}]*display/.test(css))
 check('CSS: .sheet-footer terdefinisi', css.includes('.sheet-footer {'))
+// Sheet scrollbar styling
+check('CSS: .sheet-content scrollbar-width thin', css.includes('scrollbar-width: thin'))
+
+// Investments: pakai InvestmentChart
+check('Investments: pakai InvestmentChart', invPage.includes('<InvestmentChart') && invPage.includes("from '../ui/InvestmentChart'"))
+
+// InvestmentChart: tidak ada early return yang menyembunyikan kontrol (chip aset/periode)
+// Sebelum perbaikan, ada dua `return (` sebelum render kontrol, sehingga kontrol hilang
+const invChart = read('src/ui/InvestmentChart.tsx')
+// Kontrol harus selalu dirender: cari data-testid="investment-chart" dan pastikan
+// tidak ada return lebih dari satu sebelum ChipBar/chip aset
+const topLevelReturnCount = (() => {
+  // Cari early return di level atas fungsi InvestmentChart (indent 2 spasi, bukan di callback)
+  // Buggy pattern: `  return (\n    <div className="card bento-full"` tanpa kontrol chip
+  const mainFnStart = invChart.indexOf('export function InvestmentChart')
+  const mainFnBody = mainFnStart >= 0 ? invChart.slice(mainFnStart) : ''
+  // Top-level return: baris yang diawali tepat 2 spasi, bukan di dalam arrow function
+  const lines = mainFnBody.split('\n')
+  return lines.filter((l) => /^  return\s*\(/.test(l)).length
+})()
+check('InvestmentChart: tepat 1 top-level return di komponen utama (tidak ada early return)',
+  topLevelReturnCount === 1,
+  `ditemukan ${topLevelReturnCount} top-level return, harus tepat 1`)
+
+// InvestmentChart: memakai useContainerWidth (callback ref untuk elemen kondisional)
+check('InvestmentChart: import useContainerWidth dari lib/useContainerWidth',
+  invChart.includes("from '../lib/useContainerWidth'") && invChart.includes('useContainerWidth()'),
+  'harus import useContainerWidth; useRef+useEffect([ref]) tidak aman untuk elemen kondisional')
+check('InvestmentChart: tidak ada definisi useElementWidth lokal',
+  !invChart.includes('function useElementWidth'),
+  'hook lama useElementWidth harus dihapus dari InvestmentChart')
+check('InvestmentChart: kontainer grafik punya tinggi tetap (height: H)',
+  invChart.includes('height: H') && invChart.includes('ref={chartElRef}'),
+  'div container chart harus punya height: H agar tidak runtuh jadi 0 saat elemen mount')
+check('InvestmentChart: guard NaN di yFor (Number.isFinite)',
+  invChart.includes('Number.isFinite(y)'),
+  'yFor harus memakai Number.isFinite agar grafik flat line tidak menghasilkan NaN')
 
 // Halaman: form id + tombol footer
 check('Transactions: form id="form-tx"', txPage.includes('id="form-tx"'))
@@ -94,6 +131,15 @@ check('Recurring: tombol form="form-rec"', recPage.includes('form="form-rec"'))
 // Dashboard empty state
 check('Dashboard: empty state tidak memakai num-hero',
   !/num-hero[^<]*Belum ada data|Belum ada data[^<]*num-hero/.test(dash))
+
+// Bar chart: tidak ada preserveAspectRatio="none" + teks SVG di dalamnya
+check('Dashboard: BarChart tidak memakai preserveAspectRatio="none"',
+  !dash.includes('preserveAspectRatio="none"'),
+  'preserveAspectRatio="none" menyebabkan teks meregang non-uniform')
+// Legenda bar chart adalah HTML (bukan elemen SVG <text>/<rect>)
+check('Dashboard: legenda bar chart pakai HTML (data-testid="chart-legend")',
+  dash.includes('data-testid="chart-legend"'),
+  'legenda harus di luar SVG agar tidak terdistorsi')
 
 // Token CSS
 for (const t of ['--z-header','--z-nav','--z-backdrop','--z-sheet','--z-toast'])
@@ -172,6 +218,10 @@ async function runPlaywright() {
           const txt = msg.text()
           // Abaikan warning browser bawaan tentang SW saat preview
           if (/service.worker|insecure|deprecated/i.test(txt)) return
+          // Abaikan 404 aset bawaan preview (ikon dsb) dan warning missing-table
+          // untuk price_snapshots yang memang bisa belum ada sebelum migrasi.
+          if (/Failed to load resource/i.test(txt)) return
+          if (/\[store\] tabel .* belum ada di database/i.test(txt)) return
           consoleErrors.push(`[${msg.type()}] ${txt.slice(0, 120)}`)
         }
       })
@@ -290,6 +340,483 @@ async function runPlaywright() {
         check(`Sheet Tx ${vp.w}x${vp.h}: tombol Simpan terlihat`, false, 'sheet tidak bisa dibuka')
       }
       await p.close()
+    }
+
+    // Sheet alignment: panel terpusat dan lebar input = lebar tombol Simpan
+    for (const vp of [{ w: 390, h: 700 }, { w: 768, h: 900 }, { w: 1000, h: 560 }]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: vp.w, height: vp.h })
+      await p.goto(`${BASE}/#tx`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+
+      const opened = await p.evaluate(`(function() {
+        var btns = Array.from(document.querySelectorAll('button'));
+        var add = btns.find(function(b) {
+          return (b.textContent.trim() === 'Tambah' || b.textContent.includes('Tambah Transaksi'))
+            && !b.closest('dialog');
+        });
+        if (add) { add.click(); return true; }
+        return false;
+      })()`) as boolean
+
+      if (opened) {
+        await p.waitForTimeout(400)
+        const res = await p.evaluate(`(function(vw) {
+          var dialog = document.querySelector('dialog[open]');
+          if (!dialog) return { ok: false, detail: 'dialog tidak ditemukan' };
+          var panel = dialog.querySelector('.sheet-inner');
+          if (!panel) return { ok: false, detail: 'sheet-inner tidak ditemukan' };
+          var pr = panel.getBoundingClientRect();
+          var leftMargin = pr.left;
+          var rightMargin = vw - pr.right;
+          var centerDiff = Math.abs(leftMargin - rightMargin);
+          var input = dialog.querySelector('[class="money-input-wrap"]');
+          var btn = dialog.querySelector('.sheet-footer button');
+          var inputW = input ? input.getBoundingClientRect().width : -1;
+          var btnW = btn ? btn.getBoundingClientRect().width : -1;
+          var widthDiff = inputW >= 0 && btnW >= 0 ? Math.abs(inputW - btnW) : 0;
+          var ok = centerDiff < 2 && widthDiff < 2;
+          return { ok: ok, detail: 'center diff ' + Math.round(centerDiff * 10) / 10 + 'px, input/btn diff ' + Math.round(widthDiff * 10) / 10 + 'px' };
+        })(${vp.w})`) as { ok: boolean; detail: string }
+        check(`Sheet ${vp.w}px: panel terpusat dan lebar input = Simpan`, res.ok, res.detail)
+      } else {
+        check(`Sheet ${vp.w}px: panel terpusat dan lebar input = Simpan`, false, 'sheet tidak bisa dibuka')
+      }
+      await p.close()
+    }
+
+    // Sheet centering: panel terpusat vertikal dan horizontal di >= 768px
+    for (const w of [768, 1000, 1440, 1920]) {
+      for (const h of [700, 1000]) {
+        const p = await browser.newPage()
+        await p.setViewportSize({ width: w, height: h })
+        await p.goto(`${BASE}/#tx`)
+        await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+
+        const opened = await p.evaluate(`(function() {
+          var btns = Array.from(document.querySelectorAll('button'));
+          var add = btns.find(function(b) {
+            return (b.textContent.trim() === 'Tambah' || b.textContent.includes('Tambah Transaksi'))
+              && !b.closest('dialog');
+          });
+          if (add) { add.click(); return true; }
+          return false;
+        })()`) as boolean
+
+        if (opened) {
+          await p.waitForTimeout(400)
+          const cv = await p.evaluate(`(function(vw, vh) {
+            var dialog = document.querySelector('dialog[open]');
+            if (!dialog) return { vert: false, horiz: false, detail: 'dialog tidak ditemukan' };
+            var panel = dialog.querySelector('.sheet-inner');
+            if (!panel) return { vert: false, horiz: false, detail: 'sheet-inner tidak ditemukan' };
+            var rect = panel.getBoundingClientRect();
+            var topMargin = rect.top;
+            var bottomMargin = vh - rect.bottom;
+            var vertDiff = Math.abs(topMargin - bottomMargin);
+            var leftMargin = rect.left;
+            var rightMargin = vw - rect.right;
+            var horizDiff = Math.abs(leftMargin - rightMargin);
+            return {
+              vert: vertDiff < 2,
+              horiz: horizDiff < 2,
+              detail: 'vert diff ' + Math.round(vertDiff * 10) / 10 + 'px, horiz diff ' + Math.round(horizDiff * 10) / 10 + 'px'
+            };
+          })(${w}, ${h})`) as { vert: boolean; horiz: boolean; detail: string }
+          check(`Sheet ${w}x${h}: panel terpusat vertikal`, cv.vert, cv.detail)
+          check(`Sheet ${w}x${h}: panel terpusat horizontal`, cv.horiz, cv.detail)
+        } else {
+          check(`Sheet ${w}x${h}: panel terpusat vertikal`, false, 'sheet tidak bisa dibuka')
+          check(`Sheet ${w}x${h}: panel terpusat horizontal`, false, 'sheet tidak bisa dibuka')
+        }
+        await p.close()
+      }
+    }
+
+    // ── Halaman Laporan (#lap) di 390/768/1440 ──
+    for (const w of [390, 768, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#lap`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(300)
+
+      const r = await p.evaluate(`(function() {
+        var page = document.querySelector('[data-testid="report-page"]');
+        var h1 = document.querySelector('h1');
+        var cards = document.querySelectorAll('[data-testid="report-page"] section.card');
+        return {
+          pageVisible: !!page,
+          titleOk: !!h1 && h1.textContent.trim() === 'Laporan',
+          cardCount: cards.length,
+        };
+      })()`) as { pageVisible: boolean; titleOk: boolean; cardCount: number }
+
+      check(`Report ${w}px: halaman #lap termuat`, r.pageVisible)
+      check(`Report ${w}px: judul "Laporan"`, r.titleOk)
+      check(`Report ${w}px: 4 kartu laporan tampil`, r.cardCount === 4, `cardCount=${r.cardCount}`)
+
+      // Konten tidak overflow: section.card tidak lebih lebar dari viewport
+      const overflow = await p.evaluate(`(function(vw) {
+        var cards = Array.from(document.querySelectorAll('[data-testid="report-page"] section.card'));
+        for (var i = 0; i < cards.length; i++) {
+          var rect = cards[i].getBoundingClientRect();
+          if (rect.right > vw + 1) return { ok: false, detail: 'card ' + i + ' right=' + Math.round(rect.right) + ' > vw=' + vw };
+        }
+        return { ok: true, detail: '' };
+      })(${w})`) as { ok: boolean; detail: string }
+      check(`Report ${w}px: kartu tidak overflow`, overflow.ok, overflow.detail)
+
+      await p.close()
+    }
+
+    // Dashboard: kartu Saldo Rekening tampil di 1440px
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 1440, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(300)
+
+      const found = await p.evaluate(`(function() {
+        var h2s = Array.from(document.querySelectorAll('h2'));
+        return h2s.some(function(h) { return h.textContent.trim() === 'Saldo Rekening'; });
+      })()`) as boolean
+      check('Dashboard 1440px: kartu Saldo Rekening tampil', found)
+      await p.close()
+    }
+
+    // Dashboard: grid baru — Saldo+Donut berdampingan, Bar selebar penuh
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 1440, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const gr = await p.evaluate(`(function() {
+        var bal  = document.querySelector('[data-testid="card-balance"]');
+        var don  = document.querySelector('[data-testid="card-donut"]');
+        var bar  = document.querySelector('[data-testid="card-bar"]');
+        if (!bal || !don || !bar) return { ok: false, detail: 'elemen tidak ditemukan: bal=' + !!bal + ' don=' + !!don + ' bar=' + !!bar };
+        var br = bal.getBoundingClientRect();
+        var dr = don.getBoundingClientRect();
+        var barr = bar.getBoundingClientRect();
+        var sameTop   = Math.abs(br.top - dr.top) < 2;
+        var sameHeight = Math.abs(br.height - dr.height) < 2;
+        var barBelow  = barr.top >= dr.bottom - 2;
+        var barLeftOk  = Math.abs(barr.left - br.left) < 2;
+        var barRightOk = Math.abs(barr.right - dr.right) < 2;
+        var ok = sameTop && sameHeight && barBelow && barLeftOk && barRightOk;
+        return { ok: ok, sameTop: sameTop, sameH: sameHeight, barBelow: barBelow, barL: barLeftOk, barR: barRightOk,
+          detail: 'topDiff=' + Math.round(Math.abs(br.top-dr.top)*10)/10 + ' hDiff=' + Math.round(Math.abs(br.height-dr.height)*10)/10 + ' barLeft=' + Math.round(barr.left) + ' balLeft=' + Math.round(br.left) };
+      })()`) as { ok: boolean; sameTop: boolean; sameH: boolean; barBelow: boolean; barL: boolean; barR: boolean; detail: string }
+
+      check('Dashboard 1440px: Saldo+Donut baris sama (top < 2px)', gr.sameTop, gr.detail)
+      check('Dashboard 1440px: Saldo dan Donut tinggi sama (< 2px)', gr.sameH, gr.detail)
+      check('Dashboard 1440px: Bar di bawah Saldo+Donut', gr.barBelow, gr.detail)
+      check('Dashboard 1440px: Bar melebar dari kiri Saldo ke kanan Donut', gr.barL && gr.barR, gr.detail)
+      await p.close()
+    }
+
+    // Dashboard 390px: Saldo → Donut → Bar bertumpuk berurutan
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 390, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const st = await p.evaluate(`(function() {
+        var bal  = document.querySelector('[data-testid="card-balance"]');
+        var don  = document.querySelector('[data-testid="card-donut"]');
+        var bar  = document.querySelector('[data-testid="card-bar"]');
+        if (!bal || !don || !bar) return { ok: false, detail: 'elemen tidak ditemukan' };
+        var br = bal.getBoundingClientRect();
+        var dr = don.getBoundingClientRect();
+        var barr = bar.getBoundingClientRect();
+        var order = br.top < dr.top && dr.top < barr.top;
+        var noOverflow = barr.right <= 390 + 1;
+        return { ok: order && noOverflow, detail: 'bal.top=' + Math.round(br.top) + ' don.top=' + Math.round(dr.top) + ' bar.top=' + Math.round(barr.top) + ' bar.right=' + Math.round(barr.right) };
+      })()`) as { ok: boolean; detail: string }
+
+      check('Dashboard 390px: Saldo → Donut → Bar bertumpuk berurutan', st.ok, st.detail)
+      await p.close()
+    }
+
+    // Dashboard: urutan kartu — hero di atas KPI Pemasukan (DOM dan visual)
+    for (const w of [390, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const order = await p.evaluate(`(function() {
+        var hero = document.querySelector('[data-testid="dashboard-hero"]');
+        var kpi  = document.querySelector('[data-testid="kpi-pemasukan"]');
+        if (!hero || !kpi) return { topOk: false, domOk: false, detail: 'elemen tidak ditemukan: hero=' + !!hero + ' kpi=' + !!kpi };
+        var hr = hero.getBoundingClientRect();
+        var kr = kpi.getBoundingClientRect();
+        var topOk = hr.top < kr.top;
+        var all = Array.from(document.querySelectorAll('[data-testid="dashboard-hero"], [data-testid="kpi-pemasukan"]'));
+        var domOk = all.length >= 2 && all[0] === hero;
+        return { topOk: topOk, domOk: domOk, detail: 'hero.top=' + Math.round(hr.top) + ' kpi.top=' + Math.round(kr.top) };
+      })()`) as { topOk: boolean; domOk: boolean; detail: string }
+
+      check(`Dashboard ${w}px: hero di atas KPI Pemasukan (visual)`, order.topOk, order.detail)
+      check(`Dashboard ${w}px: hero sebelum KPI Pemasukan (DOM)`, order.domOk, order.detail)
+      await p.close()
+    }
+
+    // Bar chart: legenda di luar SVG, tidak ada SVG[preserveAspectRatio="none"] dengan teks
+    for (const w of [390, 768, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#home`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const cr = await p.evaluate(`(function() {
+        // Legenda harus ada sebagai HTML di luar SVG
+        var legend = document.querySelector('[data-testid="chart-legend"]');
+        var legendIsHtml = legend && legend.tagName.toLowerCase() !== 'g' && legend.tagName.toLowerCase() !== 'svg';
+        var legendNotInSvg = legend && legend.closest('svg') === null;
+        // Tidak boleh ada SVG dengan preserveAspectRatio="none" yang berisi <text>
+        var distortedSvgs = Array.from(document.querySelectorAll('svg[preserveAspectRatio="none"]'));
+        var hasTextInDistorted = distortedSvgs.some(function(svg) { return svg.querySelectorAll('text').length > 0; });
+        // Legenda teks harus terlihat (tidak terpotong)
+        var legendVisible = false;
+        if (legend) {
+          var r = legend.getBoundingClientRect();
+          legendVisible = r.width > 0 && r.height > 0 && r.top >= 0;
+        }
+        return {
+          legendIsHtml: !!legendIsHtml,
+          legendNotInSvg: !!legendNotInSvg,
+          noDistortedText: !hasTextInDistorted,
+          legendVisible: legendVisible,
+          detail: 'legend tag=' + (legend ? legend.tagName : 'null') + ' distortedSvgs=' + distortedSvgs.length + ' hasTextInDistorted=' + hasTextInDistorted
+        };
+      })()`) as { legendIsHtml: boolean; legendNotInSvg: boolean; noDistortedText: boolean; legendVisible: boolean; detail: string }
+
+      check(`BarChart ${w}px: legenda adalah HTML (bukan SVG)`, cr.legendIsHtml, cr.detail)
+      check(`BarChart ${w}px: legenda tidak di dalam SVG`, cr.legendNotInSvg, cr.detail)
+      check(`BarChart ${w}px: tidak ada SVG preserveAspectRatio="none" dengan teks`, cr.noDistortedText, cr.detail)
+      check(`BarChart ${w}px: legenda terlihat`, cr.legendVisible, cr.detail)
+      await p.close()
+    }
+
+    // ── Halaman Investasi: InvestmentChart (#inv) ──
+    for (const w of [360, 390, 768, 1000, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#inv`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(500)
+
+      const r = await p.evaluate(`(function(vw) {
+        var card = document.querySelector('[data-testid="investment-chart"]');
+        var legend = document.querySelector('[data-testid="invest-legend"]');
+        // Legenda hanya ada kalau grafik punya data; dalam preview mode kemungkinan empty state.
+        var legendInSvg = legend ? legend.closest('svg') !== null : false;
+        var distorted = Array.from(document.querySelectorAll('svg[preserveAspectRatio="none"]'));
+        var distortedHasText = distorted.some(function(svg) { return svg.querySelectorAll('text').length > 0; });
+        var hasHorizontalScroll = document.documentElement.scrollWidth > vw + 1;
+        var cardRect = card ? card.getBoundingClientRect() : null;
+        var overflow = cardRect ? cardRect.right > vw + 1 : false;
+        // Judul harus muncul di dalam kartu (baik empty state maupun grafik)
+        var titleOk = false;
+        if (card) {
+          var h2 = card.querySelector('h2');
+          titleOk = h2 && h2.textContent && h2.textContent.indexOf('Perkembangan Investasi') >= 0;
+        }
+        return {
+          cardVisible: !!card,
+          titleOk: !!titleOk,
+          legendNotInSvg: !legendInSvg,
+          noDistortedText: !distortedHasText,
+          noHorizontalScroll: !hasHorizontalScroll,
+          noCardOverflow: !overflow,
+          detail: 'card=' + !!card + ' title=' + !!titleOk + ' legend=' + !!legend + ' legendInSvg=' + legendInSvg + ' distorted=' + distorted.length + ' hScroll=' + hasHorizontalScroll + ' cardOverflow=' + overflow
+        };
+      })(${w})`) as {
+        cardVisible: boolean
+        titleOk: boolean
+        legendNotInSvg: boolean
+        noDistortedText: boolean
+        noHorizontalScroll: boolean
+        noCardOverflow: boolean
+        detail: string
+      }
+
+      check(`InvestChart ${w}px: kartu "Perkembangan Investasi" tampil`, r.cardVisible, r.detail)
+      check(`InvestChart ${w}px: judul kartu muncul`, r.titleOk, r.detail)
+      check(`InvestChart ${w}px: legenda (jika ada) bukan di dalam SVG`, r.legendNotInSvg, r.detail)
+      check(`InvestChart ${w}px: tidak ada SVG preserveAspectRatio="none" dengan teks`, r.noDistortedText, r.detail)
+      check(`InvestChart ${w}px: tidak ada horizontal scroll`, r.noHorizontalScroll, r.detail)
+      check(`InvestChart ${w}px: kartu tidak overflow`, r.noCardOverflow, r.detail)
+      await p.close()
+    }
+
+    // ── InvestmentChart empty-state: kontrol selalu tampil ──
+    for (const w of [390, 768, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#inv`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(500)
+
+      const er = await p.evaluate(`(function(vw) {
+        var card = document.querySelector('[data-testid="investment-chart"]');
+        if (!card) return { ok: false, detail: 'kartu tidak ditemukan' };
+
+        // 1. Judul selalu ada
+        var h2 = card.querySelector('h2');
+        var titleOk = h2 && h2.textContent && h2.textContent.indexOf('Perkembangan Investasi') >= 0;
+
+        // 2. Chip "Semua" selalu ada (tombol dengan teks "Semua" di dalam kartu)
+        var btns = Array.from(card.querySelectorAll('button'));
+        var semuaBtn = btns.find(function(b) { return b.textContent && b.textContent.trim() === 'Semua'; });
+        var semuaBtnVisible = semuaBtn ? (function(el) {
+          var r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        })(semuaBtn) : false;
+
+        // 3. Chip periode (6B, 12B, Semua) selalu ada
+        var periodBtns = btns.filter(function(b) {
+          var t = b.textContent && b.textContent.trim();
+          return t === '6B' || t === '12B';
+        });
+        var periodChipsOk = periodBtns.length >= 2;
+
+        // 4. Tidak ada horizontal scroll
+        var noHScroll = document.documentElement.scrollWidth <= vw + 1;
+
+        // 5. Kartu ada di viewport (tidak tersembunyi)
+        var cardRect = card.getBoundingClientRect();
+        var cardInView = cardRect.width > 0;
+
+        // 6. Area kosong memakai teks biasa (bukan num-hero)
+        var emptyMsg = card.querySelector('[class*="muted"]');
+        var emptyMsgOk = !!emptyMsg;
+
+        return {
+          titleOk: !!titleOk,
+          semuaBtnVisible: semuaBtnVisible,
+          periodChipsOk: periodChipsOk,
+          noHScroll: noHScroll,
+          cardInView: cardInView,
+          emptyMsgOk: emptyMsgOk,
+          detail: 'title=' + !!titleOk + ' semuaBtn=' + semuaBtnVisible + ' periodChips=' + periodBtns.length + ' hScroll=' + !noHScroll + ' scrollW=' + document.documentElement.scrollWidth + ' vw=' + vw
+        };
+      })(${w})`) as {
+        titleOk: boolean; semuaBtnVisible: boolean; periodChipsOk: boolean
+        noHScroll: boolean; cardInView: boolean; emptyMsgOk: boolean; detail: string
+      }
+
+      check(`InvestChart-empty ${w}px: judul selalu tampil`, er.titleOk, er.detail)
+      check(`InvestChart-empty ${w}px: chip "Semua" selalu tampil`, er.semuaBtnVisible, er.detail)
+      check(`InvestChart-empty ${w}px: chip periode selalu tampil`, er.periodChipsOk, er.detail)
+      check(`InvestChart-empty ${w}px: tidak ada horizontal scroll`, er.noHScroll, er.detail)
+      check(`InvestChart-empty ${w}px: pesan kosong memakai teks biasa`, er.emptyMsgOk, er.detail)
+      await p.close()
+    }
+
+    // ── InvestmentChart: localStorage berisi id aset yang tidak ada → kembali ke "Semua" ──
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 390, height: 700 })
+      // Set fake asset id di localStorage sebelum navigasi
+      await p.goto(`${BASE}/#inv`)
+      await p.evaluate(`localStorage.setItem('artha:chart:asset', 'aaaaaaaa-fake-fake-fake-aaaaaaaaaaaa')`)
+      await p.reload()
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(600)
+
+      const ls = await p.evaluate(`(function() {
+        var card = document.querySelector('[data-testid="investment-chart"]');
+        var btns = card ? Array.from(card.querySelectorAll('button')) : [];
+        var semuaBtn = btns.find(function(b) { return b.textContent && b.textContent.trim() === 'Semua'; });
+        // Cek chip "Semua" terlihat (kontrol tidak menghilang)
+        var semuaVisible = semuaBtn ? semuaBtn.getBoundingClientRect().width > 0 : false;
+        // Cek nilai localStorage setelah validasi (seharusnya direvert ke 'all' atau tetap fake tapi UI tetap tampil)
+        var storedAsset = localStorage.getItem('artha:chart:asset');
+        return {
+          cardPresent: !!card,
+          semuaVisible: semuaVisible,
+          storedAsset: storedAsset,
+          detail: 'card=' + !!card + ' semuaVisible=' + semuaVisible + ' stored=' + storedAsset
+        };
+      })()`) as { cardPresent: boolean; semuaVisible: boolean; storedAsset: string | null; detail: string }
+
+      check('InvestChart: localStorage fake asset id → kartu tetap tampil', ls.cardPresent, ls.detail)
+      check('InvestChart: localStorage fake asset id → chip "Semua" masih terlihat', ls.semuaVisible, ls.detail)
+      await p.close()
+    }
+
+    // ── InvestmentChart: area grafik tidak pernah tinggi 0, path SVG tanpa NaN ──
+    for (const w of [390, 768, 1440]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.goto(`${BASE}/#inv`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(500)
+
+      const hr = await p.evaluate(`(function() {
+        var card = document.querySelector('[data-testid="investment-chart"]');
+        if (!card) return { heightOk: false, noZeroSvg: true, noNanPath: true, detail: 'kartu tidak ditemukan' };
+        // Kontainer area grafik: div position:relative dengan tinggi ~240px
+        var divs = Array.from(card.querySelectorAll('div'));
+        var areaDiv = null;
+        for (var i = 0; i < divs.length; i++) {
+          var s = window.getComputedStyle(divs[i]);
+          var h = divs[i].getBoundingClientRect().height;
+          if (s.position === 'relative' && h >= 200) { areaDiv = divs[i]; break; }
+        }
+        var containerH = areaDiv ? areaDiv.getBoundingClientRect().height : 0;
+        // SVG non-dekoratif harus punya lebar > 0 bila ada
+        var svgs = Array.from(card.querySelectorAll('svg:not([aria-hidden])'));
+        var zeroWSvgs = svgs.filter(function(sv) { return sv.getBoundingClientRect().width <= 0; });
+        // Path tidak boleh mengandung NaN
+        var paths = Array.from(card.querySelectorAll('svg path[d]'));
+        var nanPaths = paths.filter(function(pth) { return (pth.getAttribute('d') || '').indexOf('NaN') >= 0; });
+        return {
+          heightOk: containerH >= 200,
+          noZeroSvg: zeroWSvgs.length === 0,
+          noNanPath: nanPaths.length === 0,
+          detail: 'containerH=' + Math.round(containerH) + ' zeroSvgs=' + zeroWSvgs.length + ' nanPaths=' + nanPaths.length
+        };
+      })()`) as { heightOk: boolean; noZeroSvg: boolean; noNanPath: boolean; detail: string }
+
+      check(`InvestChart-render ${w}px: area grafik tinggi >= 200px (tidak runtuh)`, hr.heightOk, hr.detail)
+      check(`InvestChart-render ${w}px: tidak ada SVG non-dekoratif dengan lebar 0`, hr.noZeroSvg, hr.detail)
+      check(`InvestChart-render ${w}px: path SVG tidak mengandung NaN`, hr.noNanPath, hr.detail)
+      await p.close()
+    }
+
+    // ── InvestmentChart: tangkapan empty state palet A/B terang/gelap ──
+    mkdirSync(resolve(QA_DIR, '..', 'empty-state'), { recursive: true })
+    {
+      for (const pal of ['a', 'b'] as const) {
+        for (const mod of ['light', 'dark'] as const) {
+          const p = await browser.newPage()
+          await p.setViewportSize({ width: 390, height: 700 })
+          await p.goto(`${BASE}/#inv`)
+          await p.evaluate(`(function(pal, m) {
+            localStorage.setItem('artha:palette', pal);
+            localStorage.setItem('artha:mode', m);
+          })('${pal}', '${mod}')`)
+          await p.reload()
+          await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+          await p.waitForTimeout(400)
+          const card = await p.$('[data-testid="investment-chart"]')
+          if (card) {
+            await card.screenshot({ path: resolve(QA_DIR, '..', 'empty-state', `invest-empty-${pal}-${mod}-390.png`) })
+          }
+          await p.close()
+        }
+      }
     }
 
     // Tangkapan layar

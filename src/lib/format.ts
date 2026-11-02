@@ -33,11 +33,14 @@ export function num(n: number, maxFraction = 8): string {
   return new Intl.NumberFormat('id-ID', { maximumFractionDigits: maxFraction }).format(n)
 }
 
-export function pct(n: number | null | undefined, digits = 2): string {
+/** Format persentase dengan koma desimal (Indonesia). 0.125 → "12,50%". */
+export function formatPercent(n: number | null | undefined, digits = 2): string {
   if (n == null || !Number.isFinite(n)) return '-'
-  const sign = n > 0 ? '+' : ''
-  return `${sign}${(n * 100).toFixed(digits)}%`
+  return `${(n * 100).toFixed(digits).replace('.', ',')}%`
 }
+
+/** @deprecated Gunakan formatPercent */
+export const pct = formatPercent
 
 export function signedIdr(n: number): string {
   return `${n > 0 ? '+' : ''}${idr(n)}`
@@ -52,6 +55,7 @@ export function parseNum(input: string, dotIsDecimal = false): number {
   let t = input.trim().replace(/\s/g, '')
   if (!t) return NaN
   if (t.includes(',') && t.includes('.')) t = t.replace(/\./g, '').replace(',', '.')
+  else if (/^-?[1-9]\d{0,2}(,\d{3})+$/.test(t)) t = t.replace(/,/g, '') // ribuan pakai koma (500,000)
   else if (t.includes(',')) t = t.replace(',', '.')
   else if (!dotIsDecimal && /^[1-9]\d{0,2}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '')
   return Number(t)

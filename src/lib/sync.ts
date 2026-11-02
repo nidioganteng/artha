@@ -16,6 +16,7 @@ export const NUMERIC: Record<TableName, string[]> = {
   trades: ['quantity', 'price_per_unit', 'fee'],
   recurring_rules: ['amount', 'day_of_month'],
   recurring_checks: [],
+  price_snapshots: ['price'],
 }
 
 export const isNetworkError = (msg: string) =>
@@ -29,7 +30,7 @@ export type FailedOp = Op & { error: string; blocked: boolean; blockedBy?: strin
 
 // Kolom FK per tabel yang bisa menunjuk ke op lain yang mungkin gagal
 const FK_FIELDS: Partial<Record<TableName, string[]>> = {
-  trades: ['asset_id', 'platform_id'],
+  trades: ['asset_id', 'platform_id', 'account_id'],
   transactions: ['account_id', 'category_id', 'recurring_rule_id'],
   recurring_checks: ['rule_id', 'transaction_id'],
 }
@@ -68,6 +69,7 @@ export function emptyDB(): DB {
     trades: [],
     recurring_rules: [],
     recurring_checks: [],
+    price_snapshots: [],
   }
 }
 

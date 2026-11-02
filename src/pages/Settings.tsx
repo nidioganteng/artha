@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Sun, Moon, Monitor } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Sun, Moon, Monitor, Pencil } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { useTheme } from '../lib/theme'
 import type { FailedOp } from '../lib/store'
-import type { Asset, Kind, TableName } from '../lib/types'
+import type { Account, Asset, Kind, TableName } from '../lib/types'
 import type { Mode, Palette } from '../lib/theme'
+import { Sheet, Field, MoneyInput, ConfirmDialog } from '../ui'
+import { accountBalance } from '../lib/ledger'
+import { idr } from '../lib/format'
 
 const TABLE_LABEL: Record<TableName, string> = {
   accounts: 'Rekening',
@@ -15,6 +18,7 @@ const TABLE_LABEL: Record<TableName, string> = {
   trades: 'Catatan investasi',
   recurring_rules: 'Aturan rutin',
   recurring_checks: 'Centang rutin',
+  price_snapshots: 'Snapshot harga',
 }
 
 function opLabel(f: FailedOp): string {
@@ -127,6 +131,79 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
   const [accName, setAccName] = useState('')
   const [accType, setAccType] = useState<'cash' | 'bank' | 'ewallet'>('bank')
   const [platName, setPlatName] = useState('')
+
+  // Edit Rekening (Sheet)
+  const [editingAcc, setEditingAcc] = useState<Account | null>(null)
+  const [editAccName, setEditAccName] = useState('')
+  const [editAccType, setEditAccType] = useState<'cash' | 'bank' | 'ewallet'>('bank')
+  const [editAccOpening, setEditAccOpening] = useState<number | null>(0)
+  const [editAccError, setEditAccError] = useState<string | null>(null)
+
+  // Hapus Rekening (Confirm dengan pesan dinamis)
+  const [confirmAcc, setConfirmAcc] = useState<{ id: string; name: string } | null>(null)
+  const [blockedAcc, setBlockedAcc] = useState<{ name: string; message: string } | null>(null)
+
+  // Saldo saat ini per rekening (dari ledger)
+  const currentBalances = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const a of db.accounts) {
+      map.set(a.id, accountBalance(a, db.transactions, db.trades))
+    }
+    return map
+  }, [db.accounts, db.transactions, db.trades])
+
+  function openEditAcc(a: Account) {
+    setEditingAcc(a)
+    setEditAccName(a.name)
+    setEditAccType((a.type ?? 'bank') as 'cash' | 'bank' | 'ewallet')
+    setEditAccOpening(a.opening_balance ?? 0)
+    setEditAccError(null)
+  }
+
+  function closeEditAcc() {
+    setEditingAcc(null)
+    setEditAccError(null)
+  }
+
+  function submitEditAcc(e: FormEvent) {
+    e.preventDefault()
+    if (!editingAcc) return
+    if (!editAccName.trim()) {
+      setEditAccError('Nama rekening wajib diisi.')
+      return
+    }
+    save('accounts', {
+      ...editingAcc,
+      name: editAccName.trim(),
+      type: editAccType,
+      opening_balance: editAccOpening ?? 0,
+    })
+    closeEditAcc()
+  }
+
+  function tryDeleteAcc(a: Account) {
+    const txCount = db.transactions.filter((t) => t.account_id === a.id).length
+    const trCount = db.trades.filter((t) => t.account_id === a.id).length
+    const rrCount = db.recurring_rules.filter((r) => r.account_id === a.id).length
+    if (txCount > 0 || trCount > 0 || rrCount > 0) {
+      const parts: string[] = []
+      if (txCount > 0) parts.push(`${txCount} catatan transaksi`)
+      if (trCount > 0) parts.push(`${trCount} catatan investasi`)
+      if (rrCount > 0) parts.push(`${rrCount} aturan rutin`)
+      setBlockedAcc({
+        name: a.name,
+        message: `Rekening ini masih dipakai di ${parts.join(' dan ')}. Pindahkan atau hapus referensinya dulu.`,
+      })
+      return
+    }
+    setConfirmAcc({ id: a.id, name: a.name })
+  }
+
+  function confirmDeleteAcc() {
+    if (!confirmAcc) return
+    remove('accounts', confirmAcc.id)
+    setConfirmAcc(null)
+  }
   const [asset, setAsset] = useState({
     symbol: '',
     name: '',
@@ -546,14 +623,75 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                   {db.accounts.length === 0 && (
                     <p className="muted" style={{ fontSize: 13 }}>Belum ada rekening.</p>
                   )}
-                  {db.accounts.map((a) => (
-                    <ListRow
-                      key={a.id}
-                      label={a.name}
-                      sub={a.type}
-                      onDelete={() => del('accounts', a.id, a.name)}
-                    />
-                  ))}
+                  {db.accounts.map((a) => {
+                    const opening = a.opening_balance ?? 0
+                    const current = currentBalances.get(a.id) ?? 0
+                    const typeLabel =
+                      a.type === 'cash' ? 'Tunai' : a.type === 'ewallet' ? 'E-wallet' : 'Bank'
+                    return (
+                      <div
+                        key={a.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: '12px 0',
+                          borderTop: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 14,
+                              color: 'var(--text-1)',
+                              fontWeight: 500,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {a.name}
+                          </div>
+                          <div
+                            className="muted"
+                            style={{ fontSize: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}
+                          >
+                            <span>{typeLabel}</span>
+                            <span>Awal: {idr(opening)}</span>
+                            <span style={{ color: 'var(--text-2)' }}>Saat ini: {idr(current)}</span>
+                          </div>
+                        </div>
+                        <button
+                          className="btn-ghost"
+                          aria-label={`Ubah ${a.name}`}
+                          onClick={() => openEditAcc(a)}
+                          style={{
+                            padding: 8,
+                            minHeight: 36,
+                            minWidth: 36,
+                            border: 'none',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          className="btn-ghost"
+                          aria-label={`Hapus ${a.name}`}
+                          onClick={() => tryDeleteAcc(a)}
+                          style={{
+                            padding: 8,
+                            minHeight: 36,
+                            minWidth: 36,
+                            border: 'none',
+                            flexShrink: 0,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
                 <form
                   onSubmit={addAcc}
@@ -579,6 +717,9 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                   </select>
                   <button className="btn" style={{ flexShrink: 0 }}>Tambah</button>
                 </form>
+                <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                  Isi saldo awal di tombol ubah agar laporan saldo akurat.
+                </p>
               </Section>
             </div>
           </div>
@@ -673,6 +814,15 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                 >
                   Sinkronkan sekarang
                 </button>
+                <button
+                  className="btn-ghost"
+                  style={{ justifyContent: 'flex-start' }}
+                  onClick={() => {
+                    window.location.hash = 'lap'
+                  }}
+                >
+                  Lihat laporan bulanan
+                </button>
                 <p className="muted" style={{ fontSize: 12 }}>
                   Menunggu: {pending} · Gagal: {failed}
                 </p>
@@ -694,6 +844,83 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
           </div>
         </div>
       </div>
+
+      {/* ── Edit Rekening ────────────────────────────── */}
+      <Sheet
+        open={editingAcc !== null}
+        onClose={closeEditAcc}
+        title="Ubah Rekening"
+        footer={
+          <>
+            <button type="button" className="btn-ghost" onClick={closeEditAcc}>
+              Batal
+            </button>
+            <button type="submit" form="edit-acc-form" className="btn">
+              Simpan
+            </button>
+          </>
+        }
+      >
+        <form
+          id="edit-acc-form"
+          onSubmit={submitEditAcc}
+          style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+        >
+          <Field label="Nama rekening" htmlFor="edit-acc-name" error={editAccError ?? undefined}>
+            <input
+              id="edit-acc-name"
+              className="input"
+              value={editAccName}
+              onChange={(e) => setEditAccName(e.target.value)}
+              autoFocus
+            />
+          </Field>
+          <Field label="Jenis" htmlFor="edit-acc-type">
+            <select
+              id="edit-acc-type"
+              className="input"
+              value={editAccType}
+              onChange={(e) =>
+                setEditAccType(e.target.value as 'cash' | 'bank' | 'ewallet')
+              }
+            >
+              <option value="bank">Bank</option>
+              <option value="cash">Tunai</option>
+              <option value="ewallet">E-wallet</option>
+            </select>
+          </Field>
+          <Field label="Saldo awal" htmlFor="edit-acc-opening">
+            <MoneyInput
+              id="edit-acc-opening"
+              value={editAccOpening}
+              onValueChange={setEditAccOpening}
+            />
+            <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Isi saldo awal sesuai saldo rekening sebelum catatan pertama di Artha.
+            </p>
+          </Field>
+        </form>
+      </Sheet>
+
+      {/* ── Konfirmasi Hapus Rekening ────────────────── */}
+      <ConfirmDialog
+        open={confirmAcc !== null}
+        title="Hapus Rekening"
+        message={confirmAcc ? `Hapus rekening "${confirmAcc.name}"?` : ''}
+        confirmLabel="Hapus"
+        onConfirm={confirmDeleteAcc}
+        onCancel={() => setConfirmAcc(null)}
+      />
+
+      {/* ── Rekening tidak bisa dihapus ──────────────── */}
+      <ConfirmDialog
+        open={blockedAcc !== null}
+        title={blockedAcc ? `Tidak bisa menghapus ${blockedAcc.name}` : 'Tidak bisa menghapus'}
+        message={blockedAcc?.message ?? ''}
+        confirmLabel="Mengerti"
+        onConfirm={() => setBlockedAcc(null)}
+        onCancel={() => setBlockedAcc(null)}
+      />
     </div>
   )
 }

@@ -215,12 +215,16 @@
   .bento-half { grid-column: span 6; }
 }
 
+/* Dua kolom hanya di >= 1024px: Saldo Rekening | Pengeluaran per Kategori */
+.bento-pair { grid-column: span 12; }
+
 @media (min-width: 1024px) {
   .bento-kpi     { grid-column: span 3; }
   .bento-hero    { grid-column: span 8; }
   .bento-summary { grid-column: span 4; }
   .bento-half    { grid-column: span 6; }
   .bento-full    { grid-column: span 12; }
+  .bento-pair    { grid-column: span 6; }
 }
 
 /* ──────────────────────────────────────────────────────
@@ -355,6 +359,43 @@ body {
     color: var(--text-2);
   }
 
+  /* Input Rupiah: wrapper tampil seperti .input, prefiks "Rp" di kiri */
+  .money-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border-input);
+    border-radius: var(--radius-sm);
+    padding: 0 16px;
+    min-height: 44px;
+    transition: border-color 150ms ease-out, outline 150ms ease-out;
+  }
+  .money-input-wrap:focus-within {
+    outline: 2px solid var(--primary);
+    outline-offset: 0;
+    border-color: transparent;
+  }
+  .money-input-prefix {
+    font-size: 15px;
+    color: var(--text-3);
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .money-input-field {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 15px;
+    outline: none;
+    padding: 10px 0;
+  }
+  .money-input-field::placeholder { color: var(--text-3); }
+
   .muted {
     font-size: 13px;
     color: var(--text-3);
@@ -459,6 +500,7 @@ body {
   position: fixed;
   inset: 0;
   width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
   display: flex;
@@ -498,6 +540,8 @@ body {
   padding: 16px 20px;
   flex: 1;
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 .sheet-footer {
@@ -507,15 +551,70 @@ body {
   background: var(--surface);
 }
 
-@media (min-width: 640px) {
+@media (min-width: 768px) {
   .sheet-dialog[open] {
     align-items: center;
   }
   .sheet-inner {
     border-radius: var(--radius-xl);
-    max-height: 85dvh;
+    max-height: calc(100dvh - 2rem);
+    height: fit-content;
   }
 }
+
+/* ──────────────────────────────────────────────────────
+   CONFIRM DIALOG (kecil, terpusat)
+────────────────────────────────────────────────────── */
+.confirm-dialog {
+  margin: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.confirm-dialog[open] {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-sheet);
+}
+.confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.confirm-inner {
+  background: var(--surface);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  width: min(320px, calc(100vw - 2rem));
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.confirm-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0;
+}
+.confirm-msg {
+  font-size: 14px;
+  color: var(--text-2);
+  margin: 0;
+}
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.confirm-btn-cancel { min-height: 40px; padding: 0 16px; }
+.confirm-btn-confirm { min-height: 40px; padding: 0 16px; }
 
 /* ──────────────────────────────────────────────────────
    PALETTE SWATCHES (Settings UI — hex di CSS diizinkan)

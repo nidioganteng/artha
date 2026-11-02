@@ -51,6 +51,7 @@ export interface Trade {
   user_id: string
   asset_id: string
   platform_id: string | null
+  account_id?: string | null
   side: 'buy' | 'sell'
   quantity: number
   price_per_unit: number
@@ -80,6 +81,16 @@ export interface RecurringCheck {
   transaction_id: string | null
 }
 
+export interface PriceSnapshot {
+  id: string
+  user_id: string
+  asset_id: string
+  date: string        // ISO date "YYYY-MM-DD"
+  price: number
+  source: 'live' | 'manual' | 'history'
+  created_at: string
+}
+
 export interface DB {
   accounts: Account[]
   categories: Category[]
@@ -89,6 +100,7 @@ export interface DB {
   trades: Trade[]
   recurring_rules: RecurringRule[]
   recurring_checks: RecurringCheck[]
+  price_snapshots: PriceSnapshot[]
 }
 
 export type TableName = keyof DB

@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { m, useReducedMotion } from 'motion/react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { usePortfolio } from '../lib/usePortfolio'
-import { idr, monthKey, monthLabel, pct, shiftMonth, todayISO, dateLabel } from '../lib/format'
+import { formatPercent, idr, monthKey, monthLabel, shiftMonth, todayISO, dateLabel } from '../lib/format'
 import { formatShort } from '../lib/amount'
+import { accountBalance, monthReport, unassignedTrades } from '../lib/ledger'
+import { AlertTriangle } from 'lucide-react'
+import { useContainerWidth } from '../lib/useContainerWidth'
 
 // ──────────────────────────────────────────────────────
 // Hook: count-up
@@ -75,12 +78,14 @@ function KpiCard({
   token,
   sub,
   index,
+  testId,
 }: {
   label: string
   value: number
   token: string
   sub?: string
   index: number
+  testId?: string
 }) {
   const animated = useCountUp(value)
   const reduced = useReducedMotion()
@@ -88,6 +93,7 @@ function KpiCard({
     <m.div
       className="card bento-kpi"
       style={{ padding: 20 }}
+      data-testid={testId}
       initial={{ opacity: 0, y: reduced ? 0 : 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduced ? 0 : 0.3, delay: reduced ? 0 : index * 0.06, ease: 'easeOut' }}
@@ -115,6 +121,10 @@ function DonutChart({ cats }: { cats: [string, number][] }) {
     return { name, v, d, color: CAT_TOKENS[i % CAT_TOKENS.length] }
   })
 
+  // Font size adaptif: muat dalam lingkaran dalam (radius ~41 unit SVG)
+  const centerText = formatShort(total)
+  const centerFs = centerText.length <= 8 ? 13 : centerText.length <= 11 ? 11 : 9
+
   return (
     <svg
       viewBox="0 0 160 160"
@@ -124,63 +134,139 @@ function DonutChart({ cats }: { cats: [string, number][] }) {
       {slices.map((s) => (
         <path key={s.name} d={s.d} fill="none" stroke={s.color} strokeWidth={sw} strokeLinecap="butt" />
       ))}
-      <text x={cx} y={cy - 6} textAnchor="middle" style={{ fontSize: '11px', fill: 'var(--text-3)' }}>
+      <text x={cx} y={cy - 6} textAnchor="middle" style={{ fontSize: '10px', fill: 'var(--text-3)' }}>
         Total
       </text>
       <text
         x={cx}
-        y={cy + 10}
+        y={cy + 9}
         textAnchor="middle"
-        style={{ fontSize: '13px', fontWeight: '600', fill: 'var(--text-1)', fontFamily: 'var(--font-mono)' }}
+        style={{ fontSize: `${centerFs}px`, fontWeight: '600', fill: 'var(--text-1)', fontFamily: 'var(--font-mono)' }}
       >
-        {formatShort(total)}
+        {centerText}
       </text>
     </svg>
   )
 }
 
 // ──────────────────────────────────────────────────────
-// Bar Chart — income vs expense, 6 months
+// Bar Chart — income vs expense, 6 months (full-width)
 // ──────────────────────────────────────────────────────
 function BarChart({ data }: { data: { month: string; income: number; expense: number }[] }) {
+  const [tip, setTip] = useState<{ px: number; py: number; text: string } | null>(null)
+  const divRef = useRef<HTMLDivElement | null>(null)
+  const [W, widthRef] = useContainerWidth()
+  const wrapRef = useCallback((el: HTMLDivElement | null) => {
+    divRef.current = el
+    widthRef(el)
+  }, [widthRef])
+  const H = 220, padB = 32, padT = 8, barGap = 6
   const maxV = Math.max(...data.flatMap((d) => [d.income, d.expense]), 1)
-  const W = 320, H = 128, padB = 20, barW = 16, gap = 4
-  const slot = W / data.length
+  const slot = W > 0 ? W / data.length : 0
+  const barW = Math.min(28, slot * 0.28)
+  const rx = Math.min(4, barW / 2)
+  const groupW = barW * 2 + barGap
+  const maxDataH = H - padB - padT
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      style={{ width: '100%', height: 128 }}
-      role="img"
-      aria-label="Grafik pemasukan dan pengeluaran 6 bulan terakhir"
-    >
-      <title>Pemasukan vs pengeluaran</title>
-      {data.map((d, i) => {
-        const groupW = barW * 2 + gap
-        const x0 = slot * i + (slot - groupW) / 2
-        const incH = Math.max(2, (d.income / maxV) * (H - padB - 8))
-        const expH = Math.max(2, (d.expense / maxV) * (H - padB - 8))
-        const lbl = new Intl.DateTimeFormat('id-ID', { month: 'short' })
-          .format(new Date(parseInt(d.month.slice(0, 4)), parseInt(d.month.slice(5)) - 1, 1))
-          .slice(0, 3)
-        return (
-          <g key={d.month}>
-            <rect x={x0} y={H - padB - incH} width={barW} height={incH} rx={3} style={{ fill: 'var(--income)' }} opacity={0.9} />
-            <rect x={x0 + barW + gap} y={H - padB - expH} width={barW} height={expH} rx={3} style={{ fill: 'var(--expense)' }} opacity={0.9} />
-            <text x={x0 + groupW / 2} y={H - 4} textAnchor="middle" style={{ fontSize: '9px', fill: 'var(--text-3)' }}>
-              {lbl}
-            </text>
-          </g>
-        )
-      })}
-      <g>
-        <rect x={4} y={6} width={8} height={8} rx={2} style={{ fill: 'var(--income)' }} />
-        <text x={16} y={14} style={{ fontSize: '9px', fill: 'var(--text-3)' }}>Masuk</text>
-        <rect x={60} y={6} width={8} height={8} rx={2} style={{ fill: 'var(--expense)' }} />
-        <text x={72} y={14} style={{ fontSize: '9px', fill: 'var(--text-3)' }}>Keluar</text>
-      </g>
-    </svg>
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
+      {/* HTML legend — never distorted */}
+      <div
+        data-testid="chart-legend"
+        style={{ display: 'flex', gap: 16, marginBottom: 8, fontSize: 12, color: 'var(--text-3)', alignItems: 'center' }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--income)', display: 'inline-block', flexShrink: 0 }} />
+          Pemasukan
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--expense)', display: 'inline-block', flexShrink: 0 }} />
+          Pengeluaran
+        </span>
+      </div>
+
+      {W > 0 && (
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          width={W}
+          height={H}
+          style={{ display: 'block', width: '100%' }}
+          role="img"
+          aria-label="Grafik pemasukan dan pengeluaran 6 bulan terakhir"
+          onPointerLeave={() => setTip(null)}
+        >
+          <title>Pemasukan vs pengeluaran</title>
+
+          {/* Zero baseline */}
+          <line x1={0} y1={H - padB} x2={W} y2={H - padB} stroke="var(--border)" strokeWidth={1} />
+
+          {data.map((d, i) => {
+            const x0 = slot * i + (slot - groupW) / 2
+            const incH = Math.max(2, (d.income / maxV) * maxDataH)
+            const expH = Math.max(2, (d.expense / maxV) * maxDataH)
+            const lbl = new Intl.DateTimeFormat('id-ID', { month: 'short' })
+              .format(new Date(parseInt(d.month.slice(0, 4)), parseInt(d.month.slice(5)) - 1, 1))
+              .slice(0, 3)
+            return (
+              <g key={d.month}>
+                <rect
+                  x={x0} y={H - padB - incH} width={barW} height={incH} rx={rx}
+                  style={{ fill: 'var(--income)', cursor: 'default' }} opacity={0.9}
+                  onPointerEnter={(e) => {
+                    const rect = divRef.current?.getBoundingClientRect()
+                    if (rect) setTip({ px: e.clientX - rect.left, py: e.clientY - rect.top, text: idr(d.income) })
+                  }}
+                >
+                  <title>Pemasukan: {idr(d.income)}</title>
+                </rect>
+                <rect
+                  x={x0 + barW + barGap} y={H - padB - expH} width={barW} height={expH} rx={rx}
+                  style={{ fill: 'var(--expense)', cursor: 'default' }} opacity={0.9}
+                  onPointerEnter={(e) => {
+                    const rect = divRef.current?.getBoundingClientRect()
+                    if (rect) setTip({ px: e.clientX - rect.left, py: e.clientY - rect.top, text: idr(d.expense) })
+                  }}
+                >
+                  <title>Pengeluaran: {idr(d.expense)}</title>
+                </rect>
+                <text
+                  x={x0 + groupW / 2} y={H - 10}
+                  textAnchor="middle"
+                  style={{ fontSize: '9px', fill: 'var(--text-3)' }}
+                >
+                  {lbl}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+      )}
+
+      {/* HTML tooltip — sharp at every pixel density */}
+      {tip && (
+        <div
+          role="tooltip"
+          style={{
+            position: 'absolute',
+            left: tip.px,
+            top: tip.py - 32,
+            transform: 'translateX(-50%)',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            borderRadius: 4,
+            padding: '2px 8px',
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-1)',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        >
+          {tip.text}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -205,6 +291,7 @@ function PortfolioStack({
   live,
   at,
   goto,
+  'data-testid': testId,
 }: {
   cards: PlatformCard[]
   totalValue: number
@@ -214,6 +301,7 @@ function PortfolioStack({
   live: boolean
   at: string | null
   goto: (tab: string) => void
+  'data-testid'?: string
 }) {
   const [activeIdx, setActiveIdx] = useState(0)
   const frontRef = useRef<HTMLDivElement>(null)
@@ -254,6 +342,7 @@ function PortfolioStack({
     return (
       <div
         className="card-hero bento-hero"
+        data-testid={testId}
         style={{
           padding: 32,
           minHeight: 200,
@@ -290,6 +379,7 @@ function PortfolioStack({
   return (
     <div
       className="bento-hero"
+      data-testid={testId}
       style={{ perspective: '900px', position: 'relative', paddingBottom: backCards.length > 0 ? 28 : 0 }}
       onTouchStart={(e) => { touchX.current = e.touches[0].clientX }}
       onTouchEnd={(e) => {
@@ -412,7 +502,7 @@ function PortfolioStack({
             <div>
               <div style={{ fontSize: 11, opacity: 0.7 }}>ROI</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14 }}>
-                {pct(roi)}
+                {formatPercent(roi)}
               </div>
             </div>
             <div>
@@ -512,7 +602,7 @@ function InvestmentSummary({
               color: (total.roi ?? 0) >= 0 ? 'var(--income)' : 'var(--expense)',
             }}
           >
-            {pct(total.roi)}
+            {formatPercent(total.roi)}
           </div>
         </div>
         <div>
@@ -525,7 +615,7 @@ function InvestmentSummary({
               color: (total.cagr ?? 0) >= 0 ? 'var(--income)' : 'var(--expense)',
             }}
           >
-            {pct(total.cagr)}
+            {formatPercent(total.cagr)}
           </div>
         </div>
       </div>
@@ -713,6 +803,124 @@ function RecurringDue({ month, goto }: { month: string; goto: (tab: string) => v
 }
 
 // ──────────────────────────────────────────────────────
+// Balance Card — total saldo rekening + peringatan trade belum ditentukan
+// ──────────────────────────────────────────────────────
+function BalanceCard({ goto }: { goto: (tab: string) => void }) {
+  const { db } = useStore()
+
+  const { total, perAccount, unassigned } = useMemo(() => {
+    const perAccount = db.accounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      balance: accountBalance(a, db.transactions, db.trades),
+    }))
+    const total = perAccount.reduce((s, a) => s + a.balance, 0)
+    const unassigned = unassignedTrades(db.trades)
+    return { total, perAccount, unassigned }
+  }, [db.accounts, db.transactions, db.trades])
+
+  const topAccounts = [...perAccount].sort((a, b) => b.balance - a.balance).slice(0, 3)
+
+  return (
+    <div className="card bento-pair" data-testid="card-balance" style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 10,
+        }}
+      >
+        <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)' }}>Saldo Rekening</h2>
+        <button
+          className="btn-ghost"
+          onClick={() => {
+            window.location.hash = 'lap'
+          }}
+          style={{ padding: '6px 12px', minHeight: 36, fontSize: 13 }}
+        >
+          Lihat laporan
+        </button>
+      </div>
+      {db.accounts.length === 0 ? (
+        <p className="muted">Belum ada rekening. Tambahkan di Pengaturan.</p>
+      ) : (
+        <>
+          <div style={{ marginBottom: 10 }}>
+            <div className="muted" style={{ fontSize: 12 }}>Total saldo</div>
+            <div className="num-lg" style={{ color: 'var(--text-1)', marginTop: 2 }}>
+              {formatShort(total)}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            {topAccounts.map((a) => (
+              <div
+                key={a.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  minWidth: 0,
+                  alignItems: 'baseline',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--text-2)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    minWidth: 0,
+                    flex: 1,
+                  }}
+                >
+                  {a.name}
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: a.balance < 0 ? 'var(--expense)' : 'var(--text-1)',
+                    flexShrink: 0,
+                  }}
+                >
+                  {formatShort(a.balance)}
+                </span>
+              </div>
+            ))}
+            {perAccount.length > topAccounts.length && (
+              <div className="muted" style={{ fontSize: 12 }}>
+                +{perAccount.length - topAccounts.length} rekening lainnya
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      {unassigned.trades.length > 0 && (
+        <button
+          type="button"
+          className="chip chip-warn"
+          onClick={() => goto('inv')}
+          style={{
+            marginTop: 12,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+            alignSelf: 'flex-start',
+          }}
+        >
+          <AlertTriangle size={14} />
+          {unassigned.trades.length} catatan investasi belum ditentukan sumber dananya ({formatShort(unassigned.totalValue)})
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────
 // Dashboard
 // ──────────────────────────────────────────────────────
 export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
@@ -721,21 +929,24 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
   const [month, setMonth] = useState(() => monthKey(todayISO()))
 
   const m = useMemo(() => {
-    const tx = db.transactions.filter((t) => t.occurred_on.startsWith(month))
-    const income = tx.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0)
-    const expense = tx.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0)
-    const invest = db.trades
-      .filter((t) => t.side === 'buy' && t.traded_on.startsWith(month))
-      .reduce((s, t) => s + t.quantity * t.price_per_unit + t.fee, 0)
+    const report = monthReport(month, db.accounts, db.categories, db.transactions, db.trades)
 
     const byCat = new Map<string, number>()
-    for (const t of tx.filter((x) => x.kind === 'expense')) {
+    for (const t of db.transactions.filter(
+      (x) => x.kind === 'expense' && x.occurred_on.startsWith(month),
+    )) {
       const name = db.categories.find((c) => c.id === t.category_id)?.name ?? 'Tanpa kategori'
       byCat.set(name, (byCat.get(name) ?? 0) + t.amount)
     }
     const cats = [...byCat.entries()].sort((a, b) => b[1] - a[1]) as [string, number][]
 
-    return { income, expense, invest, left: income - expense - invest, cats }
+    return {
+      income: report.income,
+      expense: report.expense,
+      invest: report.investBuy,
+      left: report.net,
+      cats,
+    }
   }, [db, month])
 
   const barData = useMemo(
@@ -788,14 +999,13 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
   const isCurrentMonth = month === monthKey(todayISO())
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Month selector */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 20,
           gap: 12,
         }}
       >
@@ -852,20 +1062,11 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
         </div>
       </div>
 
-      {/* Bento */}
+      {/* Bento — urutan DOM = urutan visual untuk screen reader dan Tab */}
       <div className="bento">
-        <KpiCard label="Pemasukan" value={m.income} token="var(--income)" index={0} />
-        <KpiCard label="Pengeluaran" value={m.expense} token="var(--expense)" index={1} />
-        <KpiCard label="Investasi (beli)" value={m.invest} token="var(--invest)" index={2} />
-        <KpiCard
-          label="Sisa bulan ini"
-          value={m.left}
-          token={m.left >= 0 ? 'var(--income)' : 'var(--expense)'}
-          sub="masuk - keluar - investasi"
-          index={3}
-        />
-
+        {/* 1. Kartu hero investasi + ringkasan (baris atas) */}
         <PortfolioStack
+          data-testid="dashboard-hero"
           cards={platformCards}
           totalValue={total.value}
           totalBought={total.totalBought}
@@ -878,70 +1079,94 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
 
         <InvestmentSummary total={total} goto={goto} />
 
-        {/* Bar chart card */}
-        <div className="card bento-half">
-          <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
-            Pemasukan vs Pengeluaran
-          </h2>
-          {barData.every((d) => d.income === 0 && d.expense === 0) ? (
-            <p className="muted">Belum ada transaksi di 6 bulan terakhir.</p>
-          ) : (
-            <BarChart data={barData} />
-          )}
-        </div>
+        {/* 2. Empat KPI bulan ini */}
+        <KpiCard label="Pemasukan" value={m.income} token="var(--income)" index={0} testId="kpi-pemasukan" />
+        <KpiCard label="Pengeluaran" value={m.expense} token="var(--expense)" index={1} />
+        <KpiCard label="Investasi (beli)" value={m.invest} token="var(--invest)" index={2} />
+        <KpiCard
+          label="Sisa bulan ini"
+          value={m.left}
+          token={m.left >= 0 ? 'var(--income)' : 'var(--expense)'}
+          sub="masuk - keluar - investasi"
+          index={3}
+        />
+
+        {/* 3. Baris 1 — dua kolom berdampingan di >= 1024px */}
+        <BalanceCard goto={goto} />
 
         {/* Donut chart card */}
-        <div className="card bento-half">
+        <div className="card bento-pair" data-testid="card-donut" style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
           <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
             Pengeluaran per Kategori
           </h2>
           {m.cats.length === 0 ? (
             <p className="muted">Belum ada pengeluaran bulan ini.</p>
           ) : (
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <DonutChart cats={m.cats} />
-              <div style={{ flex: 1, minWidth: 100 }}>
-                {m.cats.slice(0, 6).map(([name, v], i) => (
-                  <div
-                    key={name}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}
-                  >
+            <>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+                <DonutChart cats={m.cats} />
+                <div style={{ flex: 1, minWidth: 90, overflow: 'hidden' }}>
+                  {m.cats.slice(0, 6).map(([name, v], i) => (
                     <div
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 2,
-                        background: CAT_TOKENS[i % CAT_TOKENS.length],
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--text-2)',
-                        flex: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
+                      key={name}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}
                     >
-                      {name}
+                      <div
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 2,
+                          background: CAT_TOKENS[i % CAT_TOKENS.length],
+                          flexShrink: 0,
+                        }}
+                      />
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--text-2)',
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0,
+                        }}
+                      >
+                        {name}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 12,
+                          color: 'var(--text-1)',
+                          fontWeight: 500,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {formatShort(v)}
+                      </div>
                     </div>
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        color: 'var(--text-1)',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {formatShort(v)}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+              {m.cats.length > 6 && (
+                <button
+                  className="btn-ghost"
+                  onClick={() => { window.location.hash = 'lap' }}
+                  style={{ marginTop: 8, padding: '4px 0', fontSize: 12, alignSelf: 'flex-start', minHeight: 'unset' }}
+                >
+                  Lihat semua ({m.cats.length} kategori)
+                </button>
+              )}
+            </>
           )}
+        </div>
+
+        {/* Baris 2 — grafik batang selebar penuh */}
+        <div className="card bento-full" data-testid="card-bar" style={{ minWidth: 0 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
+            Pemasukan vs Pengeluaran
+          </h2>
+          <BarChart data={barData} />
         </div>
 
         <RecentTx goto={goto} />

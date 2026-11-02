@@ -173,6 +173,24 @@ ok('isAuthError: bukan auth — RLS', !isAuthError('row-level security policy'))
   ok('findBlocker: op non-blocked tetap memblokir', findBlocker(anotherTrade, [failedAsset, blockedTrade]) === failedAsset.opId)
 }
 
+// ── Edit offline (upsert id sama) ─────────────────────────────────────────────
+ok('edit offline: upsert id sama = update tanpa duplikat', (() => {
+  const db1 = applyOps(emptyDB(), [ups('transactions', row('tx1', { amount: 100 }))])
+  const db2 = applyOps(db1, [ups('transactions', row('tx1', { amount: 200 }))])
+  return db2.transactions.length === 1 && (db2.transactions[0] as { amount: number }).amount === 200
+})())
+
+ok('hapus offline: delete masuk antrean lalu baris hilang', (() => {
+  const db1 = applyOps(emptyDB(), [ups('transactions', row('tx1', { amount: 100 }))])
+  const db2 = applyOps(db1, [del('transactions', 'tx1')])
+  return db2.transactions.length === 0
+})())
+
+ok('hapus offline: delete id tidak ada tidak error', (() => {
+  const db = applyOps(emptyDB(), [del('transactions', 'nonexistent')])
+  return db.transactions.length === 0
+})())
+
 // ── skenario lengkap: aset gagal → trade diblokir ────────────────────────────
 {
   // Simulasikan: upsert aset gagal, lalu queue masih punya trade untuk aset itu
@@ -188,6 +206,108 @@ ok('isAuthError: bukan auth — RLS', !isAuthError('row-level security policy'))
   // Setelah aset di-retry (dihapus dari failedOps), trade tidak lagi terblokir
   const failedAfterRetry: FailedOp[] = []
   ok('skenario: trade tidak terblokir setelah retry aset', findBlocker(queue[0], failedAfterRetry) === undefined)
+}
+
+// ── Trade dengan account_id (fitur ledger) ────────────────────────────────────
+{
+  const tradeOp: Op = ups('trades', row('t1', {
+    asset_id: 'a1',
+    platform_id: 'p1',
+    account_id: 'acc1',
+    side: 'buy',
+    quantity: 0.001,
+    price_per_unit: 1e9,
+    fee: 0,
+    traded_on: '2026-01-01',
+  }))
+
+  ok('trade dengan account_id: diblokir oleh rekening gagal', blockedByIds(tradeOp, new Set(['acc1'])))
+  ok('trade dengan account_id: tidak diblokir rekening lain', !blockedByIds(tradeOp, new Set(['acc2'])))
+  ok('trade dengan account_id: aset tetap bisa memblokir', blockedByIds(tradeOp, new Set(['a1'])))
+  ok('trade dengan account_id: platform tetap bisa memblokir', blockedByIds(tradeOp, new Set(['p1'])))
+
+  const failedAcc: FailedOp = {
+    ...ups('accounts', row('acc1', { name: 'BRI', type: 'bank', opening_balance: 0 })),
+    error: 'constraint violation',
+    blocked: false,
+  }
+  ok('findBlocker trade: diblokir rekening gagal', findBlocker(tradeOp, [failedAcc]) === failedAcc.opId)
+
+  // Trade tanpa account_id (undefined) tidak boleh diblokir oleh rekening apa pun
+  const tradeNoAcc: Op = ups('trades', row('t2', {
+    asset_id: 'a1',
+    platform_id: 'p1',
+    side: 'buy',
+    quantity: 0.001,
+    price_per_unit: 1e9,
+    fee: 0,
+    traded_on: '2026-01-01',
+  }))
+  ok('trade tanpa account_id: tidak diblokir rekening gagal', !blockedByIds(tradeNoAcc, new Set(['acc1'])))
+
+  // Trade dengan account_id = null (JSON) — null bukan string → tidak diblokir
+  const tradeNullAcc: Op = ups('trades', row('t3', {
+    asset_id: 'a1',
+    platform_id: 'p1',
+    account_id: null,
+    side: 'buy',
+    quantity: 0.001,
+    price_per_unit: 1e9,
+    fee: 0,
+    traded_on: '2026-01-01',
+  }))
+  ok('trade account_id null: tidak diblokir rekening gagal', !blockedByIds(tradeNullAcc, new Set(['acc1'])))
+}
+
+// ── Edit trade (upsert id sama) dengan account_id ────────────────────────────
+ok('edit trade: upsert id sama = update, account_id berubah', (() => {
+  const db1 = applyOps(emptyDB(), [ups('trades', row('t1', {
+    asset_id: 'a1', platform_id: 'p1', account_id: null,
+    side: 'buy', quantity: 0.001, price_per_unit: 1e9, fee: 0, traded_on: '2026-01-01',
+  }))])
+  const db2 = applyOps(db1, [ups('trades', row('t1', {
+    asset_id: 'a1', platform_id: 'p1', account_id: 'acc1',
+    side: 'buy', quantity: 0.001, price_per_unit: 1e9, fee: 0, traded_on: '2026-01-01',
+  }))])
+  return db2.trades.length === 1 && (db2.trades[0] as { account_id: string | null }).account_id === 'acc1'
+})())
+
+// ── Baca trade tanpa account_id (snapshot dari server lama) ──────────────────
+ok('trade dari server lama (tanpa account_id) tetap muncul di UI', (() => {
+  const db = applyOps(emptyDB(), [ups('trades', row('t1', {
+    asset_id: 'a1', platform_id: 'p1',
+    side: 'buy', quantity: 0.001, price_per_unit: 1e9, fee: 0, traded_on: '2026-01-01',
+  }))])
+  return db.trades.length === 1
+})())
+
+// ── price_snapshots (tabel baru untuk grafik perkembangan investasi) ─────────
+{
+  // Upsert snapshot menambah baris
+  const op1: Op = ups('price_snapshots', row('ps1', {
+    asset_id: 'a1', date: '2026-10-01', price: 1_000_000_000, source: 'live',
+  }))
+  const db1 = applyOps(emptyDB(), [op1])
+  ok('price_snapshots: upsert menambah baris', db1.price_snapshots.length === 1)
+
+  // Upsert id sama = update, bukan duplikat (idempotent lewat getOrCreateSnapshotId)
+  const op2: Op = ups('price_snapshots', row('ps1', {
+    asset_id: 'a1', date: '2026-10-01', price: 1_050_000_000, source: 'live',
+  }))
+  const db2 = applyOps(db1, [op2])
+  ok('price_snapshots: upsert id sama = update (idempotent)',
+    db2.price_snapshots.length === 1 &&
+    (db2.price_snapshots[0] as { price: number }).price === 1_050_000_000)
+
+  // Delete snapshot
+  const db3 = applyOps(db2, [del('price_snapshots', 'ps1')])
+  ok('price_snapshots: delete menghapus baris', db3.price_snapshots.length === 0)
+
+  // Snapshot diblokir oleh asset gagal (price_snapshots.asset_id → assets.id)
+  // Catatan: price_snapshots BELUM terdaftar di FK_FIELDS, jadi tidak diblokir.
+  // Ini sengaja: data snapshot bersifat metadata, bisa dibuang kalau asetnya hilang.
+  ok('price_snapshots: tidak diblokir oleh asset gagal (metadata-only)',
+    !blockedByIds(op1, new Set(['a1'])))
 }
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
