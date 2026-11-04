@@ -189,6 +189,9 @@ export default function Investments() {
       try { localStorage.setItem('artha:last_contributor', saveCid) } catch { /* ignore */ }
     }
 
+    // total_cost: buy = qty * price + fee, sell = qty * price - fee (min 1 agar > 0 constraint)
+    const totalCost = side === 'buy' ? q * perUnit + f : Math.max(1, q * perUnit - f)
+
     if (editTrade) {
       // Validate that position won't go negative
       const otherTrades = db.trades.filter(
@@ -229,9 +232,21 @@ export default function Investments() {
         fee: f,
         traded_on: date,
       })
+      // Perbarui transaksi tautannya jika ada
+      const linkedTx = db.transactions.find((t) => t.trade_id === editTrade.id)
+      if (linkedTx && saveAccountId) {
+        save('transactions', {
+          ...linkedTx,
+          kind: side === 'buy' ? 'expense' : 'income',
+          amount: totalCost,
+          account_id: saveAccountId,
+          occurred_on: date,
+          note: `${side === 'buy' ? 'Beli' : 'Jual'} ${asset.symbol}`,
+        })
+      }
     } else {
       setFormError('')
-      save('trades', {
+      const tradeId = save('trades', {
         asset_id: effectiveAssetId,
         platform_id: effectivePlatformId || null,
         account_id: saveAccountId,
@@ -243,6 +258,19 @@ export default function Investments() {
         traded_on: date,
         note: null,
       })
+      // Buat transaksi tautannya secara otomatis untuk arus kas
+      if (saveAccountId) {
+        save('transactions', {
+          kind: side === 'buy' ? 'expense' : 'income',
+          amount: totalCost,
+          account_id: saveAccountId,
+          category_id: null,
+          occurred_on: date,
+          note: `${side === 'buy' ? 'Beli' : 'Jual'} ${asset.symbol}`,
+          recurring_rule_id: null,
+          trade_id: tradeId,
+        })
+      }
     }
     if (effectiveAccountId) writeLastAccount(effectiveAccountId)
     setEditTrade(null)
@@ -1064,9 +1092,14 @@ export default function Investments() {
       <ConfirmDialog
         open={deleteTarget !== null}
         title="Hapus Catatan"
-        message="Hapus catatan investasi ini?"
+        message="Hapus catatan investasi ini? Pengeluaran terkait juga akan dihapus."
         onConfirm={() => {
-          if (deleteTarget) remove('trades', deleteTarget.id)
+          if (deleteTarget) {
+            // Hapus transaksi tautannya dulu agar langsung hilang dari UI (cascade server-side)
+            const linkedTx = db.transactions.find((t) => t.trade_id === deleteTarget.id)
+            if (linkedTx) remove('transactions', linkedTx.id)
+            remove('trades', deleteTarget.id)
+          }
           setDeleteTarget(null)
         }}
         onCancel={() => setDeleteTarget(null)}
