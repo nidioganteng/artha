@@ -235,6 +235,10 @@ function allDemoIds(): Set<string> {
     }
   })
 
+  // Contributors
+  ids.add(demoId('demo:contributor:dio'))
+  ids.add(demoId('demo:contributor:pasangan'))
+
   return ids
 }
 
@@ -373,7 +377,7 @@ async function main() {
     }
 
     // Hapus semua tabel yang mungkin punya demo data
-    const tables = ['recurring_checks', 'recurring_rules', 'price_snapshots', 'trades', 'transactions']
+    const tables = ['recurring_checks', 'recurring_rules', 'price_snapshots', 'trades', 'transactions', 'contributors']
     for (const table of tables) {
       const ids = [...allDemoIds()]
       for (let i = 0; i < ids.length; i += 200) {
@@ -394,6 +398,16 @@ async function main() {
   const ruleStreamingId = demoId('demo:rule:streaming')
   const ruleGajiId = demoId('demo:rule:gaji')
   const ruleDcaBtcId = demoId('demo:rule:dca-btc')
+
+  const contribDioId = demoId('demo:contributor:dio')
+  const contribPasanganId = demoId('demo:contributor:pasangan')
+
+  const contributorRows = [
+    { id: contribDioId, user_id: userId, name: 'Dio', sort_order: 0 },
+    { id: contribPasanganId, user_id: userId, name: 'Pasangan', sort_order: 1 },
+  ]
+
+  const profileRow = { id: userId, user_id: userId, mode: 'lengkap', mode_locked: false }
 
   const recurringRules = [
     {
@@ -726,7 +740,20 @@ async function main() {
     },
   ]
 
-  const allTradeRows = [...btcTradeRows, ...emasTradeRows]
+  // contributor_id ~60% Dio (8/14 BTC, 4/7 EMAS), ~40% Pasangan
+  const BTC_CONTRIB = [0,0,0,0,0,0,0,0,1,1,1,1,1,1] as const
+  const EMAS_CONTRIB = [0,0,0,0,1,1,1] as const
+
+  const allTradeRows = [
+    ...btcTradeRows.map((r, i) => ({
+      ...r,
+      contributor_id: BTC_CONTRIB[i] === 0 ? contribDioId : contribPasanganId,
+    })),
+    ...emasTradeRows.map((r, i) => ({
+      ...r,
+      contributor_id: EMAS_CONTRIB[i] === 0 ? contribDioId : contribPasanganId,
+    })),
+  ]
 
   // ─── Siapkan recurring checks ─────────────────────────────────────────────
 
@@ -924,10 +951,12 @@ async function main() {
     console.log('CATATAN: Semua data adalah DATA FIKTIF, bukan data pasar sungguhan.')
     console.log('')
     console.log('Tabel yang akan diisi:')
+    console.log(`  contributors   : ${contributorRows.length} baris (${contributorRows.map((c) => c.name).join(', ')})`)
+    console.log(`  profiles       : 1 baris (mode: ${profileRow.mode})`)
     console.log(`  transactions   : ${allTxRows.length} baris`)
     console.log(`  recurring_rules: ${recurringRules.length} baris`)
     console.log(`  recurring_checks: ${recurringCheckRows.length} baris`)
-    console.log(`  trades         : ${allTradeRows.length} baris`)
+    console.log(`  trades         : ${allTradeRows.length} baris (${BTC_CONTRIB.filter((x) => x === 0).length + EMAS_CONTRIB.filter((x) => x === 0).length} Dio, ${BTC_CONTRIB.filter((x) => x === 1).length + EMAS_CONTRIB.filter((x) => x === 1).length} Pasangan)`)
     console.log(`  price_snapshots: ${priceSnapshotRows.length} baris`)
     console.log('')
     console.log('Perkiraan saldo akhir (setelah opening balance diperbarui):')
@@ -951,6 +980,18 @@ async function main() {
   if (YES) {
     console.log(`\nMenulis data demo ke akun: ${maskEmail(email)}`)
     console.log('CATATAN: Semua data adalah DATA FIKTIF, bukan data pasar sungguhan.')
+
+    // 0. Upsert contributors dan profiles
+    console.log('Menulis kontributor...')
+    await upsertBatched(supabase, 'contributors', contributorRows)
+
+    console.log('Menulis profil akun...')
+    const { error: errProfile } = await supabase
+      .from('profiles')
+      .upsert(profileRow, { onConflict: 'id' })
+    if (errProfile && !errProfile.message.includes('does not exist')) {
+      console.warn(`Profil tidak bisa ditulis (tabel mungkin belum ada): ${errProfile.message}`)
+    }
 
     // 1. Update opening balance akun
     console.log('Memperbarui saldo awal rekening...')
