@@ -3,7 +3,7 @@ import { Sun, Moon, Monitor, Pencil } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { useTheme } from '../lib/theme'
 import type { FailedOp } from '../lib/store'
-import type { Account, Asset, Kind, TableName } from '../lib/types'
+import type { Account, Asset, Contributor, Kind, TableName } from '../lib/types'
 import type { Mode, Palette } from '../lib/theme'
 import { Sheet, Field, MoneyInput, ConfirmDialog } from '../ui'
 import { accountBalance } from '../lib/ledger'
@@ -149,6 +149,15 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
   const [confirmDel, setConfirmDel] = useState<{ table: 'categories' | 'platforms' | 'assets'; id: string; label: string } | null>(null)
   const [blockedAsset, setBlockedAsset] = useState<{ name: string; message: string } | null>(null)
 
+  // Kontributor
+  const [contribName, setContribName] = useState('')
+  const [contribNameError, setContribNameError] = useState<string | null>(null)
+  const [editingContrib, setEditingContrib] = useState<Contributor | null>(null)
+  const [editContribName, setEditContribName] = useState('')
+  const [editContribError, setEditContribError] = useState<string | null>(null)
+  const [confirmDelContrib, setConfirmDelContrib] = useState<{ id: string; name: string } | null>(null)
+  const [blockedContrib, setBlockedContrib] = useState<{ name: string; message: string } | null>(null)
+
   // Saldo saat ini per rekening (dari ledger)
   const currentBalances = useMemo(() => {
     const map = new Map<string, number>()
@@ -269,6 +278,64 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
       return
     }
     setConfirmDel({ table, id, label })
+  }
+
+  function addContrib(e: FormEvent) {
+    e.preventDefault()
+    const trimmed = contribName.trim()
+    if (!trimmed) return
+    if (db.contributors.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      setContribNameError('Nama sudah dipakai.')
+      return
+    }
+    save('contributors', { name: trimmed, sort_order: db.contributors.length })
+    setContribName('')
+    setContribNameError(null)
+  }
+
+  function openEditContrib(c: Contributor) {
+    setEditingContrib(c)
+    setEditContribName(c.name)
+    setEditContribError(null)
+  }
+
+  function closeEditContrib() {
+    setEditingContrib(null)
+    setEditContribError(null)
+  }
+
+  function submitEditContrib(e: FormEvent) {
+    e.preventDefault()
+    if (!editingContrib) return
+    const trimmed = editContribName.trim()
+    if (!trimmed) {
+      setEditContribError('Nama wajib diisi.')
+      return
+    }
+    if (db.contributors.some((c) => c.id !== editingContrib.id && c.name.toLowerCase() === trimmed.toLowerCase())) {
+      setEditContribError('Nama sudah dipakai kontributor lain.')
+      return
+    }
+    save('contributors', { ...editingContrib, name: trimmed })
+    closeEditContrib()
+  }
+
+  function tryDeleteContrib(c: Contributor) {
+    const trCount = db.trades.filter((t) => t.contributor_id === c.id).length
+    if (trCount > 0) {
+      setBlockedContrib({
+        name: c.name,
+        message: `Kontributor ini masih dipakai di ${trCount} catatan investasi. Ubah catatannya dulu di tab Investasi.`,
+      })
+      return
+    }
+    setConfirmDelContrib({ id: c.id, name: c.name })
+  }
+
+  function confirmDeleteContrib() {
+    if (!confirmDelContrib) return
+    remove('contributors', confirmDelContrib.id)
+    setConfirmDelContrib(null)
   }
 
   const modeOptions: { value: Mode; label: string; Icon: typeof Sun }[] = [
@@ -771,6 +838,76 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
             </Section>
           </div>
 
+          {/* Kontributor */}
+          <div className="card" style={{ padding: 20 }}>
+            <Section title="Kontributor">
+              <div>
+                {db.contributors.length === 0 && (
+                  <p className="muted" style={{ fontSize: 13 }}>Belum ada kontributor.</p>
+                )}
+                {[...db.contributors].sort((a, b) => a.sort_order - b.sort_order).map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '10px 0',
+                      borderTop: '1px solid var(--border)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: 14,
+                        color: 'var(--text-1)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                    <button
+                      className="btn-ghost"
+                      aria-label={`Ubah ${c.name}`}
+                      onClick={() => openEditContrib(c)}
+                      style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', flexShrink: 0 }}
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      className="btn-ghost"
+                      aria-label={`Hapus ${c.name}`}
+                      onClick={() => tryDeleteContrib(c)}
+                      style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', flexShrink: 0 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={addContrib} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="input"
+                    placeholder="Nama kontributor"
+                    value={contribName}
+                    onChange={(e) => { setContribName(e.target.value); setContribNameError(null) }}
+                  />
+                  <button className="btn" style={{ flexShrink: 0 }}>Tambah</button>
+                </div>
+                {contribNameError && (
+                  <p style={{ fontSize: 12, color: 'var(--expense)', margin: 0 }}>{contribNameError}</p>
+                )}
+              </form>
+              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Kontributor dicatat per transaksi investasi untuk menghitung porsi masing-masing.
+              </p>
+            </Section>
+          </div>
+
           {/* Data & Akun */}
           <div className="card" style={{ padding: 20 }}>
             <Section title="Data dan Akun">
@@ -952,6 +1089,59 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
         confirmLabel="Mengerti"
         onConfirm={() => setBlockedAsset(null)}
         onCancel={() => setBlockedAsset(null)}
+      />
+
+      {/* ── Edit Kontributor ─────────────────────────── */}
+      <Sheet
+        open={editingContrib !== null}
+        onClose={closeEditContrib}
+        title="Ubah Kontributor"
+        footer={
+          <>
+            <button type="button" className="btn-ghost" onClick={closeEditContrib}>
+              Batal
+            </button>
+            <button type="submit" form="edit-contrib-form" className="btn">
+              Simpan
+            </button>
+          </>
+        }
+      >
+        <form
+          id="edit-contrib-form"
+          onSubmit={submitEditContrib}
+          style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+        >
+          <Field label="Nama" htmlFor="edit-contrib-name" error={editContribError ?? undefined}>
+            <input
+              id="edit-contrib-name"
+              className="input"
+              value={editContribName}
+              onChange={(e) => { setEditContribName(e.target.value); setEditContribError(null) }}
+              autoFocus
+            />
+          </Field>
+        </form>
+      </Sheet>
+
+      {/* ── Konfirmasi Hapus Kontributor ──────────────── */}
+      <ConfirmDialog
+        open={confirmDelContrib !== null}
+        title="Hapus Kontributor"
+        message={confirmDelContrib ? `Hapus kontributor "${confirmDelContrib.name}"?` : ''}
+        confirmLabel="Hapus"
+        onConfirm={confirmDeleteContrib}
+        onCancel={() => setConfirmDelContrib(null)}
+      />
+
+      {/* ── Kontributor tidak bisa dihapus ───────────── */}
+      <ConfirmDialog
+        open={blockedContrib !== null}
+        title={blockedContrib ? `Tidak bisa menghapus ${blockedContrib.name}` : 'Tidak bisa menghapus'}
+        message={blockedContrib?.message ?? ''}
+        confirmLabel="Mengerti"
+        onConfirm={() => setBlockedContrib(null)}
+        onCancel={() => setBlockedContrib(null)}
       />
     </div>
   )

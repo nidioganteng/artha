@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { m, useReducedMotion } from 'motion/react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { usePortfolio } from '../lib/usePortfolio'
+import { useMode } from '../lib/useMode'
+import { contributorShares } from '../lib/calc'
 import { formatPercent, idr, monthKey, monthLabel, shiftMonth, todayISO, dateLabel } from '../lib/format'
 import { formatShort } from '../lib/amount'
 import { accountBalance, monthReport, unassignedTrades } from '../lib/ledger'
-import { AlertTriangle } from 'lucide-react'
 import { useContainerWidth } from '../lib/useContainerWidth'
 
 // ──────────────────────────────────────────────────────
@@ -941,6 +942,7 @@ function BalanceCard({ goto }: { goto: (tab: string) => void }) {
 export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
   const { db, ready } = useStore()
   const { rows, total, at, live } = usePortfolio()
+  const { mode: accountMode } = useMode()
   const [month, setMonth] = useState(() => monthKey(todayISO()))
   const monthDefaultSet = useRef(false)
 
@@ -989,6 +991,11 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
     [db.transactions, month],
   )
 
+  const contribShares = useMemo(
+    () => contributorShares(db.trades, db.contributors, total.value),
+    [db.trades, db.contributors, total.value],
+  )
+
   const platformCards = useMemo((): PlatformCard[] => {
     const map = new Map<string, PlatformCard>()
     for (const row of rows) {
@@ -1026,8 +1033,8 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-      {/* Segmented: Ringkasan | Laporan — hanya di mobile, desktop pakai sidebar */}
-      <div
+      {/* Segmented: Ringkasan | Laporan — hanya di mobile + mode lengkap */}
+      {accountMode === 'lengkap' && <div
         className="md:hidden"
         style={{
           display: 'flex',
@@ -1075,7 +1082,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
         >
           Laporan
         </button>
-      </div>
+      </div>}
 
       {/* Month selector */}
       <div
@@ -1156,23 +1163,23 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
 
         <InvestmentSummary total={total} goto={goto} className="hidden md:block" />
 
-        {/* 2. Empat KPI bulan ini */}
-        <KpiCard label="Pemasukan" value={m.income} token="var(--income)" index={0} testId="kpi-pemasukan" />
-        <KpiCard label="Pengeluaran" value={m.expense} token="var(--expense)" index={1} />
-        <KpiCard label="Investasi (beli)" value={m.invest} token="var(--invest)" index={2} />
-        <KpiCard
+        {/* 2. KPI bulan ini */}
+        {accountMode === 'lengkap' && <KpiCard label="Pemasukan" value={m.income} token="var(--income)" index={0} testId="kpi-pemasukan" />}
+        {accountMode === 'lengkap' && <KpiCard label="Pengeluaran" value={m.expense} token="var(--expense)" index={1} />}
+        <KpiCard label="Investasi (beli)" value={m.invest} token="var(--invest)" index={accountMode === 'lengkap' ? 2 : 0} />
+        {accountMode === 'lengkap' && <KpiCard
           label="Sisa bulan ini"
           value={m.left}
           token={m.left >= 0 ? 'var(--income)' : 'var(--expense)'}
           sub="masuk - keluar - investasi"
           index={3}
-        />
+        />}
 
         {/* 3. Baris 1 — dua kolom berdampingan di >= 1024px */}
-        <BalanceCard goto={goto} />
+        {accountMode === 'lengkap' && <BalanceCard goto={goto} />}
 
         {/* Donut chart card */}
-        <div className="card bento-pair" data-testid="card-donut" style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
+        {accountMode === 'lengkap' && <div className="card bento-pair" data-testid="card-donut" style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
           <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
             Pengeluaran per Kategori
           </h2>
@@ -1236,19 +1243,68 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
               )}
             </>
           )}
-        </div>
+        </div>}
 
         {/* Baris 2 — grafik batang selebar penuh */}
-        <div className="card bento-full" data-testid="card-bar" style={{ minWidth: 0 }}>
+        {accountMode === 'lengkap' && <div className="card bento-full" data-testid="card-bar" style={{ minWidth: 0 }}>
           <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
             Pemasukan vs Pengeluaran
           </h2>
           <BarChart data={barData} />
-        </div>
+        </div>}
 
-        <RecentTx goto={goto} />
+        {accountMode === 'lengkap' && <RecentTx goto={goto} />}
 
-        <RecurringDue month={month} goto={goto} />
+        {accountMode === 'lengkap' && <RecurringDue month={month} goto={goto} />}
+
+        {/* Porsi Kontributor — tampil bila ada kontributor */}
+        {contribShares.length > 0 && db.contributors.length > 0 && (
+          <div className="card bento-full" style={{ padding: 20 }}>
+            <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 4 }}>
+              Porsi Kontributor
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {contribShares.map((s) => (
+                <div
+                  key={s.contributorId ?? '__none__'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderTop: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: 14, color: 'var(--text-1)' }}>{s.name}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {formatPercent(s.sharePct)} porsi
+                      {s.capped && ' (setoran negatif)'}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' as const, flexShrink: 0 }}>
+                    <div
+                      style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14, color: 'var(--text-1)' }}
+                    >
+                      {formatShort(s.shareValue)}
+                    </div>
+                    {!s.capped && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontFamily: 'var(--font-mono)',
+                          color: s.sharePL >= 0 ? 'var(--income)' : 'var(--expense)',
+                        }}
+                      >
+                        {s.sharePL >= 0 ? '+' : ''}{formatShort(s.sharePL)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
