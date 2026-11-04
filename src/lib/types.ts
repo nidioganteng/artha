@@ -52,12 +52,29 @@ export interface Trade {
   asset_id: string
   platform_id: string | null
   account_id?: string | null
+  contributor_id?: string | null
   side: 'buy' | 'sell'
   quantity: number
   price_per_unit: number
   fee: number
   traded_on: string
   note: string | null
+}
+
+export type AccountMode = 'lengkap' | 'investasi'
+
+export interface Profile {
+  id: string        // = user_id (1:1 dengan auth.users)
+  user_id: string
+  mode: AccountMode
+  mode_locked: boolean
+}
+
+export interface Contributor {
+  id: string
+  user_id: string
+  name: string
+  sort_order: number
 }
 
 export interface RecurringRule {
@@ -101,6 +118,8 @@ export interface DB {
   recurring_rules: RecurringRule[]
   recurring_checks: RecurringCheck[]
   price_snapshots: PriceSnapshot[]
+  profiles: Profile[]
+  contributors: Contributor[]
 }
 
 export type TableName = keyof DB

@@ -28,12 +28,14 @@ const TABLES: TableName[] = [
   'recurring_rules',
   'recurring_checks',
   'price_snapshots',
+  'profiles',
+  'contributors',
 ]
 
 // Tabel yang kalau belum ada di database tidak mematikan aplikasi — cukup pakai
 // array kosong. Dipakai untuk migrasi lunak: fitur baru bisa dideploy sebelum
 // user menjalankan migrasi SQL-nya.
-const OPTIONAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['price_snapshots'])
+const OPTIONAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['price_snapshots', 'profiles', 'contributors'])
 
 const isMissingRelationError = (msg: string) =>
   /relation .* does not exist|could not find the table|schema cache/i.test(msg)
