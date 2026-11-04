@@ -398,5 +398,44 @@ ok('trade dari server lama (tanpa account_id) tetap muncul di UI', (() => {
   ok('hapus kontributor: null-out idempoten (tidak duplikasi trade)', repeat.trades.length === 2)
 }
 
+// ── transaksi tautannya (linked tx dari catatan DCA) ─────────────────────────
+// Ketika trade upsert gagal, transaksi yang punya trade_id ke trade itu
+// harus diblokir (blockedByIds / findBlocker), karena FK akan gagal di server.
+{
+  const failedTradeOpId = u()
+  const tradeRow = row('tr1', { asset_id: 'a1', side: 'buy', quantity: 1, price_per_unit: 1e9, fee: 0, traded_on: '2026-01-01' })
+  const txRow = row('tx1', { kind: 'expense', amount: 1e9, account_id: 'acc1', category_id: null, occurred_on: '2026-01-01', trade_id: 'tr1' })
+
+  const failedTrade: FailedOp = { opId: failedTradeOpId, table: 'trades', op: 'upsert', row: tradeRow, error: 'fk error', blocked: false }
+  const failedSet = new Set([tradeRow.id])
+
+  const linkedTxOp: Op = ups('transactions', txRow)
+
+  ok('linked tx: diblokir bila trade upsert gagal', blockedByIds(linkedTxOp, failedSet))
+  ok('linked tx: findBlocker menemukan opId trade yang gagal', findBlocker(linkedTxOp, [failedTrade]) === failedTradeOpId)
+}
+
+// Hapus trade dan linked tx secara offline-first
+{
+  const base = applyOps(emptyDB(), [
+    ups('assets', row('a1', { symbol: 'BTC', name: 'Bitcoin', asset_type: 'crypto', unit: 'BTC', price_source: 'indodax', price_ref: 'btcidr' })),
+    ups('accounts', row('acc1', { name: 'BRI', type: 'bank', opening_balance: 0 })),
+    ups('trades', row('tr1', { asset_id: 'a1', platform_id: null, account_id: 'acc1', side: 'buy', quantity: 0.0001, price_per_unit: 3500000000, fee: 0, traded_on: '2026-01-01' })),
+    ups('transactions', row('tx1', { kind: 'expense', amount: 350000, account_id: 'acc1', category_id: null, occurred_on: '2026-01-01', trade_id: 'tr1', recurring_rule_id: null })),
+  ])
+
+  ok('linked tx: transaksi ada sebelum hapus', base.transactions.length === 1)
+  ok('linked tx: trade ada sebelum hapus', base.trades.length === 1)
+
+  // Hapus linked tx dulu, baru trade (urutan yang dikirim ke server saat offline-first)
+  const afterDel = applyOps(base, [del('transactions', 'tx1'), del('trades', 'tr1')])
+  ok('linked tx: transaksi hilang setelah dihapus', afterDel.transactions.length === 0)
+  ok('linked tx: trade hilang setelah dihapus', afterDel.trades.length === 0)
+
+  // Idempoten: hapus ulang tidak error
+  const afterDelAgain = applyOps(afterDel, [del('transactions', 'tx1'), del('trades', 'tr1')])
+  ok('linked tx: hapus ulang idempoten', afterDelAgain.transactions.length === 0 && afterDelAgain.trades.length === 0)
+}
+
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
 process.exit(failed === 0 ? 0 : 1)
