@@ -25,6 +25,7 @@ export interface Transaction {
   note: string | null
   occurred_on: string
   recurring_rule_id: string | null
+  trade_id: string | null
 }
 
 export interface Platform {
