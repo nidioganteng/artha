@@ -41,13 +41,16 @@ export default function Recurring() {
     c.kind === (kind === 'income' ? 'income' : 'expense'),
   )
 
-  const done = useMemo(
-    () =>
-      rules.filter((r) =>
-        db.recurring_checks.some((c) => c.rule_id === r.id && c.month === monthDate),
-      ).length,
-    [rules, db.recurring_checks, monthDate],
-  )
+  const { done, doneAmount, totalAmount } = useMemo(() => {
+    const doneRules = rules.filter((r) =>
+      db.recurring_checks.some((c) => c.rule_id === r.id && c.month === monthDate),
+    )
+    return {
+      done: doneRules.length,
+      doneAmount: doneRules.reduce((s, r) => s + r.amount, 0),
+      totalAmount: rules.reduce((s, r) => s + r.amount, 0),
+    }
+  }, [rules, db.recurring_checks, monthDate])
 
   function dueDate(r: RecurringRule): string {
     const [y, m] = month.split('-').map(Number)
@@ -193,7 +196,7 @@ export default function Recurring() {
             className="btn-ghost"
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             aria-label="Bulan sebelumnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 40, padding: '0 10px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
           >
             <ChevronLeft size={16} />
           </button>
@@ -214,25 +217,30 @@ export default function Recurring() {
             onClick={() => setMonth((m) => shiftMonth(m, 1))}
             disabled={isCurrentMonth}
             aria-label="Bulan berikutnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 40, padding: '0 10px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
           >
             <ChevronRight size={16} />
           </button>
         </div>
 
         {rules.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 24,
-                fontWeight: 700,
-                color: done === rules.length ? 'var(--income)' : 'var(--text-1)',
-              }}
-            >
-              {done}
-            </span>
-            <span className="muted">/ {rules.length} selesai</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 24,
+                  fontWeight: 700,
+                  color: done === rules.length ? 'var(--income)' : 'var(--text-1)',
+                }}
+              >
+                {done}
+              </span>
+              <span className="muted">/ {rules.length} selesai</span>
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              {formatShort(doneAmount)} / {formatShort(totalAmount)}
+            </div>
           </div>
         )}
       </div>
@@ -294,7 +302,7 @@ export default function Recurring() {
                   transition: 'opacity 150ms ease-out',
                 }}
               >
-                {/* Checkbox */}
+                {/* Checkbox — visual 24px tapi area sentuh 44px */}
                 <button
                   type="button"
                   role="checkbox"
@@ -302,6 +310,20 @@ export default function Recurring() {
                   aria-label={`Tandai ${r.name}`}
                   onClick={() => (checked ? uncheck(r) : check(r))}
                   style={{
+                    width: 44,
+                    height: 44,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    cursor: 'pointer',
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                    marginLeft: -10,
+                  }}
+                >
+                  <span style={{
                     width: 24,
                     height: 24,
                     borderRadius: 6,
@@ -310,15 +332,12 @@ export default function Recurring() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0,
-                    cursor: 'pointer',
                     color: checked ? 'var(--income-fg)' : 'transparent',
                     fontSize: 13,
                     fontWeight: 700,
                     transition: 'all 150ms ease-out',
-                  }}
-                >
-                  ✓
+                    flexShrink: 0,
+                  }}>✓</span>
                 </button>
 
                 {/* Content */}
@@ -329,15 +348,13 @@ export default function Recurring() {
                       fontWeight: 500,
                       color: checked ? 'var(--text-3)' : 'var(--text-1)',
                       textDecoration: checked ? 'line-through' : 'none',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      wordBreak: 'break-word',
                     }}
                   >
                     {r.name}
                   </div>
                   <div className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
-                    <span className={`chip ${chipVariant}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+                    <span className={`chip ${chipVariant}`} style={{ fontSize: 12, padding: '1px 6px' }}>
                       {KIND_LABEL[r.kind]}
                     </span>
                     <span>Tgl {due}</span>
