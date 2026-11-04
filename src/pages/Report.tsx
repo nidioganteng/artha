@@ -151,7 +151,7 @@ function CategoryBar({
 // ──────────────────────────────────────────────────────
 // Report page (#lap)
 // ──────────────────────────────────────────────────────
-export default function Report() {
+export default function Report({ goto }: { goto?: (tab: string) => void }) {
   const { db } = useStore()
   const [month, setMonth] = useState(() => monthKey(todayISO()))
 
@@ -176,6 +176,58 @@ export default function Report() {
       data-testid="report-page"
       style={{ display: 'flex', flexDirection: 'column', gap: 0 }}
     >
+      {/* Segmented: Ringkasan | Laporan — hanya di mobile, desktop pakai sidebar */}
+      <div
+        className="md:hidden"
+        style={{
+          display: 'flex',
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+          padding: 2,
+          gap: 2,
+          marginBottom: 20,
+        }}
+      >
+        <button
+          onClick={() => goto ? goto('home') : (window.location.hash = 'home')}
+          style={{
+            flex: 1,
+            minHeight: 40,
+            padding: '0 16px',
+            borderRadius: 'calc(var(--radius-md) - 2px)',
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-2)',
+            fontWeight: 500,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Ringkasan
+        </button>
+        <button
+          aria-current="page"
+          style={{
+            flex: 1,
+            minHeight: 40,
+            padding: '0 16px',
+            borderRadius: 'calc(var(--radius-md) - 2px)',
+            border: 'none',
+            background: 'var(--surface)',
+            color: 'var(--text-1)',
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: 'default',
+            fontFamily: 'inherit',
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          Laporan
+        </button>
+      </div>
+
       {/* Header + month picker */}
       <div
         style={{
@@ -211,7 +263,7 @@ export default function Report() {
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             className="btn-ghost"
             aria-label="Bulan sebelumnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 40, padding: '0 10px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
           >
             <ChevronLeft size={16} />
           </button>
@@ -233,7 +285,7 @@ export default function Report() {
             className="btn-ghost"
             aria-label="Bulan berikutnya"
             disabled={isCurrentMonth}
-            style={{ border: 'none', borderRadius: 0, minHeight: 40, padding: '0 10px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
           >
             <ChevronRight size={16} />
           </button>
@@ -384,13 +436,19 @@ export default function Report() {
               role="status"
               style={{
                 marginTop: 12,
-                display: 'inline-flex',
-                alignItems: 'center',
+                display: 'flex',
+                alignItems: 'flex-start',
                 gap: 6,
+                whiteSpace: 'normal',
+                borderRadius: 'var(--radius-md)',
+                lineHeight: 1.5,
+                width: '100%',
               }}
             >
-              <AlertTriangle size={14} />
-              {unassigned.trades.length} catatan investasi tidak terhitung ke rekening ({formatShort(unassigned.totalValue)})
+              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>
+                {unassigned.trades.length} catatan investasi tidak terhitung ke rekening ({formatShort(unassigned.totalValue)})
+              </span>
             </div>
           )}
         </Card>

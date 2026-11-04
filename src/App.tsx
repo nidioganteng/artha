@@ -268,7 +268,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
                 {tab === 'tx' && <Transactions />}
                 {tab === 'inv' && <Investments />}
                 {tab === 'rec' && <Recurring />}
-                {tab === 'lap' && <Report />}
+                {tab === 'lap' && <Report goto={(t) => go(t as Tab)} />}
                 {tab === 'set' && <Settings onLogout={onLogout} focusFailed={focusFailed} />}
               </m.div>
             </AnimatePresence>
