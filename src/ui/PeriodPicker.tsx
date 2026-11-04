@@ -41,14 +41,13 @@ interface RangePickerBodyProps {
   onMonthClick: (mk: string) => void
   onYearPrev: () => void
   onYearNext: () => void
-  onPreset: (from: string, to: string) => void
   onApply: () => void
   onCancel: () => void
 }
 
 function RangePickerBody({
   tempFrom, tempTo, viewYear, monthsWithData,
-  onMonthClick, onYearPrev, onYearNext, onPreset,
+  onMonthClick, onYearPrev, onYearNext,
 }: RangePickerBodyProps) {
   const reduced = useReducedMotion()
   const today = todayMonth()
@@ -57,13 +56,6 @@ function RangePickerBody({
   const rangeMin = tempFrom && tempTo ? (tempFrom < tempTo ? tempFrom : tempTo) : null
   const rangeMax = tempFrom && tempTo ? (tempFrom > tempTo ? tempFrom : tempTo) : null
   const hasRange = !!(rangeMin && rangeMax)
-
-  const presets: Array<{ label: string; from: string; to: string }> = [
-    { label: '1 bulan lalu', from: addMonths(today, -1), to: addMonths(today, -1) },
-    { label: '3 bulan terakhir', from: addMonths(today, -2), to: today },
-    { label: '6 bulan terakhir', from: addMonths(today, -5), to: today },
-    { label: '12 bulan terakhir', from: addMonths(today, -11), to: today },
-  ]
 
   const summaryText = (() => {
     if (!tempFrom && !tempTo) return 'Pilih bulan awal'
@@ -79,24 +71,6 @@ function RangePickerBody({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Preset chips */}
-      <div
-        role="group"
-        aria-label="Rentang cepat"
-        style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
-      >
-        {presets.map((p) => (
-          <button
-            key={p.label}
-            className="chip"
-            onClick={() => onPreset(p.from, p.to)}
-            style={{ minHeight: 36, fontSize: 13, cursor: 'pointer', border: '1px solid var(--border)' }}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
       {/* Year navigation */}
       <div
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
@@ -282,12 +256,6 @@ export function PeriodPicker({ period, onChange, monthsWithData, summaryLabel, '
     }
   }, [tempFrom, tempTo])
 
-  const handlePreset = useCallback((from: string, to: string) => {
-    setTempFrom(from)
-    setTempTo(to)
-    setViewYear(parseInt(to.slice(0, 4)))
-  }, [])
-
   // Esc closes popover
   useEffect(() => {
     if (!pickerOpen || isMobile) return
@@ -420,7 +388,7 @@ export function PeriodPicker({ period, onChange, monthsWithData, summaryLabel, '
             onMonthClick={handleMonthClick}
             onYearPrev={() => setViewYear((y) => y - 1)}
             onYearNext={() => setViewYear((y) => y + 1)}
-            onPreset={handlePreset}
+
             onApply={handleApply}
             onCancel={closePicker}
           />
@@ -481,7 +449,7 @@ export function PeriodPicker({ period, onChange, monthsWithData, summaryLabel, '
               onMonthClick={handleMonthClick}
               onYearPrev={() => setViewYear((y) => y - 1)}
               onYearNext={() => setViewYear((y) => y + 1)}
-              onPreset={handlePreset}
+  
               onApply={handleApply}
               onCancel={closePicker}
             />
