@@ -284,7 +284,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                     }}
                   >
                     <Icon size={18} />
-                    <span style={{ fontSize: 11, fontWeight: 500, fontFamily: 'inherit' }}>{label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, fontFamily: 'inherit' }}>{label}</span>
                   </button>
                 )
               })}
@@ -321,7 +321,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', fontFamily: 'inherit' }}>{label}</div>
-                      <div className="muted" style={{ fontSize: 11 }}>{desc}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{desc}</div>
                     </div>
                     {active && (
                       <span style={{ fontSize: 14, color: 'var(--primary)', flexShrink: 0 }}>✓</span>
@@ -378,7 +378,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                   <Icon size={15} style={{ flexShrink: 0, color: active ? 'var(--primary)' : 'var(--text-3)' }} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', fontFamily: 'inherit' }}>{label}</div>
-                    <div className="muted" style={{ fontSize: 11 }}>{desc}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{desc}</div>
                   </div>
                 </button>
               )
@@ -410,7 +410,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                   {modeLocked ? <Lock size={13} /> : <Unlock size={13} />}
                   Kunci mode
                 </div>
-                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>Cegah perubahan tidak sengaja</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Cegah perubahan tidak sengaja</div>
               </div>
               <button
                 role="switch"
@@ -442,10 +442,10 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
             <div key={f.opId} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>{opLabel(f)}</div>
-                <div className="muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.error}</div>
+                <div className="muted" style={{ fontSize: 12, wordBreak: 'break-word' }}>{f.error}</div>
               </div>
-              {!f.blocked && <button className="btn" onClick={() => retryFailed(f.opId)} style={{ padding: '6px 12px', minHeight: 32, fontSize: 12, flexShrink: 0 }}>Coba lagi</button>}
-              <button className="btn-ghost" onClick={() => discardFailed(f.opId)} style={{ padding: '6px 12px', minHeight: 32, fontSize: 12, color: 'var(--expense)', flexShrink: 0 }}>Buang</button>
+              {!f.blocked && <button className="btn" onClick={() => retryFailed(f.opId)} style={{ padding: '6px 12px', minHeight: 44, fontSize: 12, flexShrink: 0 }}>Coba lagi</button>}
+              <button className="btn-ghost" onClick={() => discardFailed(f.opId)} style={{ padding: '6px 12px', minHeight: 44, fontSize: 12, color: 'var(--expense)', flexShrink: 0 }}>Buang</button>
             </div>
           ))}
         </section>
@@ -465,7 +465,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
               <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
-                  <div className="muted" style={{ fontSize: 11 }}>{typeLabel} · {idr(current)}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>{typeLabel} · {idr(current)}</div>
                 </div>
                 <button className="btn-ghost" aria-label={`Ubah ${a.name}`} onClick={() => openEditAcc(a)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}><Pencil size={14} /></button>
                 <button className="btn-ghost" aria-label={`Hapus ${a.name}`} onClick={() => tryDeleteAcc(a)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
@@ -481,7 +481,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
             </select>
             <button className="btn" style={{ flexShrink: 0 }}>+</button>
           </form>
-          <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>Isi saldo awal lewat tombol edit agar laporan akurat.</p>
+          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Isi saldo awal lewat tombol edit agar laporan akurat.</p>
         </div>
 
         {/* Kategori */}
@@ -496,14 +496,14 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                    <div className="muted" style={{ fontSize: 11 }}>{c.kind === 'income' ? 'Pemasukan' : 'Pengeluaran'}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{c.kind === 'income' ? 'Pemasukan' : 'Pengeluaran'}</div>
                   </div>
                   {c.kind === 'expense' && (
                     <button
                       className="chip"
                       aria-label={budget ? `Ubah batas ${c.name}` : `Tambah batas ${c.name}`}
                       onClick={() => isEditingBudget ? closeBudgetEdit() : openEditBudget(c.id, budget?.amount)}
-                      style={{ fontSize: 11, padding: '2px 8px', cursor: 'pointer', border: 'none', background: isEditingBudget ? 'var(--primary)' : undefined, color: isEditingBudget ? 'var(--primary-fg)' : undefined }}
+                      style={{ fontSize: 12, padding: '2px 8px', cursor: 'pointer', border: 'none', background: isEditingBudget ? 'var(--primary)' : undefined, color: isEditingBudget ? 'var(--primary-fg)' : undefined }}
                     >
                       {budget ? formatShort(budget.amount) : '+ Batas'}
                     </button>
@@ -563,7 +563,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--border)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{a.name} <span className="muted">({a.symbol})</span></div>
-                <div className="muted" style={{ fontSize: 11 }}>{a.price_source === 'indodax' ? `Live: ${a.price_ref}` : 'Harga manual'}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{a.price_source === 'indodax' ? `Live: ${a.price_ref}` : 'Harga manual'}</div>
               </div>
               <button className="btn-ghost" aria-label={`Hapus ${a.name}`} onClick={() => del('assets', a.id, a.name)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
             </div>
@@ -630,7 +630,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
             </div>
             {contribNameError && <p style={{ fontSize: 12, color: 'var(--expense)', margin: 0 }}>{contribNameError}</p>}
           </form>
-          <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>Dicatat per transaksi investasi untuk menghitung porsi masing-masing.</p>
+          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Dicatat per transaksi investasi untuk menghitung porsi masing-masing.</p>
         </div>
 
         {/* Data & Akun */}
@@ -647,7 +647,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
               </button>
             ))}
           </div>
-          <p className="muted" style={{ fontSize: 11, margin: '10px 0' }}>Menunggu: {pending} · Gagal: {failed}</p>
+          <p className="muted" style={{ fontSize: 12, margin: '10px 0' }}>Menunggu: {pending} · Gagal: {failed}</p>
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
             <button className="btn-ghost" onClick={onLogout} style={{ justifyContent: 'flex-start', color: 'var(--expense)', width: '100%' }}>
               Keluar dari akun

@@ -12,7 +12,7 @@ export function SyncBadge({ onGoSettings }: SyncBadgeProps) {
       <button
         onClick={onGoSettings}
         className="chip chip-warn"
-        style={{ cursor: 'pointer', border: 'none', fontFamily: 'inherit' }}
+        style={{ cursor: 'pointer', border: 'none', fontFamily: 'inherit', minHeight: 44 }}
         aria-label={`${failed} gagal sinkron, ketuk untuk lihat detail`}
       >
         {failed} gagal sinkron

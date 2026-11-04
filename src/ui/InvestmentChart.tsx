@@ -98,6 +98,7 @@ function Chip({
         fontWeight: active ? 600 : 400,
         cursor: 'pointer',
         minHeight: 44,
+        minWidth: 44,
         fontFamily: 'inherit',
         whiteSpace: 'nowrap' as const,
         transition: 'background 120ms ease-out, color 120ms ease-out',
