@@ -1,5 +1,4 @@
-// Adegan 3D abstrak untuk halaman login.
-// Semua elemen aria-hidden — murni dekoratif.
+// Adegan 3D abstrak untuk halaman login — dekoratif, aria-hidden.
 
 function SceneBall({ style }: { style: React.CSSProperties }) {
   return (
@@ -24,17 +23,26 @@ function AbstractCard({
   rotY,
   children,
   bg,
+  blurPx,
   style,
+  floatId,
 }: {
   depth: number
   rotX: number
   rotY: number
   children: React.ReactNode
   bg: string
+  blurPx: number
   style?: React.CSSProperties
+  floatId: 'a' | 'b' | 'c'
 }) {
   return (
-    <div className="scene-card" data-floatcard aria-hidden="true" style={{ position: 'absolute', ...style, padding: 0 }}>
+    <div
+      className="scene-card"
+      data-floatcard={floatId}
+      aria-hidden="true"
+      style={{ position: 'absolute', ...style, padding: 0 }}
+    >
       <div
         style={{
           width: '100%',
@@ -44,8 +52,8 @@ function AbstractCard({
           alignItems: style?.alignItems,
           justifyContent: style?.justifyContent,
           background: bg,
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          backdropFilter: `blur(${blurPx}px)`,
+          WebkitBackdropFilter: `blur(${blurPx}px)`,
           border: '1px solid var(--scene-glow)',
           borderRadius: 20,
           boxShadow: 'var(--shadow-lg)',
@@ -73,11 +81,48 @@ export default function LoginScene({
   tiltX,
   tiltY,
   reduced,
+  narrow,
 }: {
   tiltX: number
   tiltY: number
   reduced: boolean
+  narrow: boolean
 }) {
+  // Kurangi blur backdrop pada kartu di layar sempit untuk performa mobile
+  const blur = narrow ? 5 : 8
+
+  // Skala batang grafik pada kartu sempit (agar muat dalam kartu yang lebih kecil)
+  const bs = narrow ? 0.6 : 1
+
+  // Posisi kartu: sempit vs lebar
+  // Layar sempit (<900px): kartu di sudut atas (kiri/kanan) dan pojok bawah.
+  // Kartu menonjol sedikit keluar tepi (depth effect); overflow:hidden pada kontainer memotongnya.
+  const c1Style = narrow
+    ? { left: '-12px', top: '1.5%', width: 155, height: 92, padding: '10px 12px' }
+    : { left: 'calc(50% - 370px)', top: 'calc(50% - 160px)', width: 280, height: 180, padding: '14px 16px' }
+  const c1Rot = narrow ? { x: -4, y: 10, d: -40 } : { x: -6, y: 12, d: -60 }
+
+  const c2Style = narrow
+    ? { right: '-12px', top: '5%', width: 148, height: 86, padding: '10px 12px' }
+    : { left: 'calc(50% - 335px)', top: 'calc(50% - 65px)', width: 260, height: 160, padding: '14px 16px' }
+  const c2Rot = narrow ? { x: -4, y: -9, d: -20 } : { x: 4, y: -10, d: -30 }
+
+  const c3Style = narrow
+    ? { right: '12px', bottom: '2.5%', width: 132, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+    : { left: 'calc(50% - 300px)', top: 'calc(50% + 25px)', width: 240, height: 150, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+  const c3Rot = narrow ? { x: 5, y: 7, d: -60 } : { x: 8, y: 6, d: -80 }
+
+  // Ukuran bola glow dan cincin — lebih kecil di layar sempit
+  const ringSize = narrow ? 60 : 80
+  const ringInset = narrow ? 7 : 10
+
+  const ball1Style = narrow
+    ? { width: 240, height: 240, top: '-50px', right: '-50px' }
+    : { width: 320, height: 320, top: '-80px', right: '-60px' }
+  const ball2Style = narrow
+    ? { width: 160, height: 160, bottom: '5%', left: '-30px', opacity: 0.3 }
+    : { width: 200, height: 200, bottom: '10%', left: '-40px', opacity: 0.3 }
+
   return (
     <div
       aria-hidden="true"
@@ -87,6 +132,7 @@ export default function LoginScene({
         overflow: 'hidden',
         perspective: '900px',
         perspectiveOrigin: '50% 40%',
+        pointerEvents: 'none',
       }}
     >
       {/* Gradien latar */}
@@ -99,9 +145,9 @@ export default function LoginScene({
         }}
       />
 
-      {/* Bola glow */}
-      <SceneBall style={{ width: 320, height: 320, top: '-80px', right: '-60px' }} />
-      <SceneBall style={{ width: 200, height: 200, bottom: '10%', left: '-40px', opacity: 0.3 }} />
+      {/* Bola glow latar */}
+      <SceneBall style={ball1Style} />
+      <SceneBall style={ball2Style} />
 
       {/* Kontainer 3D — ikut tilt pointer */}
       <div
@@ -114,13 +160,15 @@ export default function LoginScene({
           willChange: reduced ? 'auto' : 'transform',
         }}
       >
-        {/* Kartu 1 — kiri atas, koin + chip */}
+        {/* Kartu 1 — koin + chip */}
         <AbstractCard
-          depth={-60}
-          rotX={-6}
-          rotY={12}
+          depth={c1Rot.d}
+          rotX={c1Rot.x}
+          rotY={c1Rot.y}
           bg="var(--scene-card-a)"
-          style={{ left: 'calc(50% - 370px)', top: 'calc(50% - 160px)', width: 280, height: 180, padding: '14px 16px' }}
+          blurPx={blur}
+          floatId="a"
+          style={c1Style}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -137,55 +185,51 @@ export default function LoginScene({
                 />
               ))}
             </div>
-            <Chip color="var(--scene-3)" w={80} />
-            <Chip color="var(--scene-2)" w={55} />
+            <Chip color="var(--scene-3)" w={narrow ? 60 : 80} />
+            <Chip color="var(--scene-2)" w={narrow ? 42 : 55} />
           </div>
         </AbstractCard>
 
-        {/* Kartu 2 — tengah, grafik batang naik */}
+        {/* Kartu 2 — grafik batang naik */}
         <AbstractCard
-          depth={-30}
-          rotX={4}
-          rotY={-10}
+          depth={c2Rot.d}
+          rotX={c2Rot.x}
+          rotY={c2Rot.y}
           bg="var(--scene-card-b)"
-          style={{ left: 'calc(50% - 335px)', top: 'calc(50% - 65px)', width: 260, height: 160, padding: '14px 16px' }}
+          blurPx={blur}
+          floatId="b"
+          style={c2Style}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%' }}>
-            <Chip color="var(--scene-2)" w={70} />
+            <Chip color="var(--scene-2)" w={narrow ? 52 : 70} />
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, marginTop: 'auto' }}>
-              <MiniBar h={20} color="var(--scene-2)" />
-              <MiniBar h={32} color="var(--scene-3)" />
-              <MiniBar h={26} color="var(--scene-2)" />
-              <MiniBar h={44} color="var(--scene-3)" />
-              <MiniBar h={38} color="var(--scene-2)" />
-              <MiniBar h={52} color="var(--scene-3)" />
+              <MiniBar h={Math.round(20 * bs)} color="var(--scene-2)" />
+              <MiniBar h={Math.round(32 * bs)} color="var(--scene-3)" />
+              <MiniBar h={Math.round(26 * bs)} color="var(--scene-2)" />
+              <MiniBar h={Math.round(44 * bs)} color="var(--scene-3)" />
+              <MiniBar h={Math.round(38 * bs)} color="var(--scene-2)" />
+              <MiniBar h={Math.round(52 * bs)} color="var(--scene-3)" />
             </div>
           </div>
         </AbstractCard>
 
-        {/* Kartu 3 — kiri bawah, cincin orbit (hanya desktop) */}
+        {/* Kartu 3 — cincin orbit */}
         <AbstractCard
-          depth={-80}
-          rotX={8}
-          rotY={6}
+          depth={c3Rot.d}
+          rotX={c3Rot.x}
+          rotY={c3Rot.y}
           bg="var(--scene-card-a)"
-          style={{
-            left: 'calc(50% - 300px)',
-            top: 'calc(50% + 25px)',
-            width: 240,
-            height: 150,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          blurPx={blur}
+          floatId="c"
+          style={c3Style}
         >
-          <div style={{ position: 'relative', width: 80, height: 80 }}>
+          <div style={{ position: 'relative', width: ringSize, height: ringSize }}>
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
                 style={{
                   position: 'absolute',
-                  inset: i * 10,
+                  inset: i * ringInset,
                   borderRadius: '50%',
                   border: `1.5px solid var(--scene-${i === 1 ? '3' : '2'})`,
                   opacity: 0.5 + i * 0.15,
@@ -198,8 +242,8 @@ export default function LoginScene({
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
-                width: 16,
-                height: 16,
+                width: narrow ? 12 : 16,
+                height: narrow ? 12 : 16,
                 borderRadius: '50%',
                 background: 'var(--scene-3)',
                 transform: 'translate(-50%,-50%)',

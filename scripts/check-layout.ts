@@ -10,6 +10,7 @@ import { execSync, spawn, type ChildProcess } from 'node:child_process'
 
 const ROOT = resolve(import.meta.dirname, '..')
 const QA_DIR = resolve(ROOT, 'docs/qa/verify')
+const UI_AUDIT_DIR = resolve(ROOT, 'docs/ui-audit')
 
 function read(rel: string) {
   return readFileSync(resolve(ROOT, rel), 'utf8')
@@ -183,6 +184,17 @@ check('Settings.tsx: setAccountMode dipanggil', settingsPage.includes('setAccoun
 check('Settings.tsx: toggle kunci mode (role=switch)', settingsPage.includes('role="switch"') && settingsPage.includes('setModeLocked') && settingsPage.includes('data-testid="mode-lock-toggle"'))
 check('Settings.tsx: ConfirmDialog untuk mode lengkap', settingsPage.includes("pendingMode === 'lengkap'") && settingsPage.includes('Ganti ke Mode Lengkap'))
 check('Settings.tsx: ConfirmDialog buka kunci mode', settingsPage.includes('confirmUnlock') && settingsPage.includes('Buka Kunci'))
+
+// ── Halaman Login: adegan 3D ─────────────────────────────────────────────────
+const loginPage = read('src/pages/Login.tsx')
+check('Login.tsx: .login-scene tanpa display:none media query',
+  !/\.login-scene\s*\{[^}]*display\s*:\s*none/.test(loginPage))
+check('Login.tsx: keyframe scene-float-a ada',
+  loginPage.includes('@keyframes scene-float-a'))
+check('Login.tsx: narrow state via ResizeObserver',
+  loginPage.includes('ResizeObserver') && loginPage.includes('setNarrow'))
+check('App.tsx: rute login-preview ada di blok SHELL_PREVIEW',
+  app.includes('login-preview'))
 
 // ── 2. BROWSER (Playwright) ───────────────────────────────────────────────────
 
@@ -1030,6 +1042,88 @@ async function runPlaywright() {
 
       check(`Settings ${w}px: toggle kunci mode ada, 44x44px, role=switch`, r.ok, r.detail)
       await p.close()
+    }
+
+    // ── Halaman Login: adegan 3D terlihat di semua lebar ─────────────────────
+    for (const w of [360, 390, 768, 820]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 700 })
+      await p.goto(`${BASE}/#login-preview`)
+      await p.waitForSelector('#login-email', { timeout: 6000 }).catch(() => {})
+      await p.waitForTimeout(300)
+
+      const r = await p.evaluate(`(function() {
+        var scene = document.querySelector('.login-scene');
+        var sceneVisible = scene ? window.getComputedStyle(scene).display !== 'none' : false;
+        var email = document.querySelector('#login-email');
+        var submit = document.querySelector('[type="submit"]');
+        var emailRect = email ? email.getBoundingClientRect() : null;
+        var eFromPt = emailRect ? document.elementFromPoint(
+          Math.round(emailRect.left + emailRect.width / 2),
+          Math.round(emailRect.top + emailRect.height / 2)
+        ) : null;
+        var emailInteractable = eFromPt ? (eFromPt === email || (email ? email.contains(eFromPt) : false)) : false;
+        var submitRect = submit ? submit.getBoundingClientRect() : null;
+        var submitVisible = submitRect ? submitRect.width > 0 && submitRect.height > 0 : false;
+        return {
+          sceneVisible: sceneVisible,
+          emailInteractable: emailInteractable,
+          submitVisible: submitVisible,
+          detail: 'scene=' + sceneVisible + ' emailFromPt=' + (eFromPt ? eFromPt.tagName : 'null') + ' submit=' + submitVisible
+        };
+      })()`) as { sceneVisible: boolean; emailInteractable: boolean; submitVisible: boolean; detail: string }
+
+      check(`Login ${w}px: adegan 3D terlihat (.login-scene)`, r.sceneVisible, r.detail)
+      check(`Login ${w}px: email field dapat diinteraksi`, r.emailInteractable, r.detail)
+      check(`Login ${w}px: tombol kirim terlihat`, r.submitVisible, r.detail)
+      await p.close()
+    }
+
+    // Login: reduced-motion — adegan tetap ada, animasi float mati
+    {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: 390, height: 700 })
+      await p.emulateMedia({ reducedMotion: 'reduce' })
+      await p.goto(`${BASE}/#login-preview`)
+      await p.waitForSelector('#login-email', { timeout: 6000 }).catch(() => {})
+      await p.waitForTimeout(300)
+
+      const rm = await p.evaluate(`(function() {
+        var scene = document.querySelector('.login-scene');
+        var scenePresent = scene ? window.getComputedStyle(scene).display !== 'none' : false;
+        var cards = Array.from(document.querySelectorAll('[data-floatcard]'));
+        var anyAnimated = cards.some(function(c) {
+          return window.getComputedStyle(c).animationName !== 'none';
+        });
+        return { scenePresent: scenePresent, anyAnimated: anyAnimated, detail: 'scene=' + scenePresent + ' animated=' + anyAnimated + ' cards=' + cards.length };
+      })()`) as { scenePresent: boolean; anyAnimated: boolean; detail: string }
+
+      check('Login reduced-motion: adegan tetap ada', rm.scenePresent, rm.detail)
+      check('Login reduced-motion: animasi float mati', !rm.anyAnimated, rm.detail)
+      await p.close()
+    }
+
+    // Login scene: tangkapan layar ke docs/ui-audit/
+    mkdirSync(UI_AUDIT_DIR, { recursive: true })
+    {
+      for (const pal of ['a', 'b'] as const) {
+        for (const mod of ['light', 'dark'] as const) {
+          for (const w of [360, 390, 768, 820]) {
+            const p = await browser.newPage()
+            await p.setViewportSize({ width: w, height: 700 })
+            await p.goto(`${BASE}/#login-preview`)
+            await p.evaluate(`(function(pal, m) {
+              localStorage.setItem('artha:palette', pal);
+              localStorage.setItem('artha:mode', m);
+            })('${pal}', '${mod}')`)
+            await p.reload()
+            await p.waitForSelector('#login-email', { timeout: 6000 }).catch(() => {})
+            await p.waitForTimeout(400)
+            await p.screenshot({ path: resolve(UI_AUDIT_DIR, 'login-' + pal + '-' + mod + '-' + w + '.png') })
+            await p.close()
+          }
+        }
+      }
     }
 
     // Tangkapan layar

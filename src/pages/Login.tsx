@@ -104,6 +104,7 @@ export default function Login() {
   const [saveData] = useState(
     () => !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData,
   )
+  const [narrow, setNarrow] = useState(() => window.innerWidth < 900)
 
   // Jeda animasi saat tab tersembunyi
   useEffect(() => {
@@ -117,29 +118,36 @@ export default function Login() {
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
 
-  // Paralaks pointer — hanya fine pointer, tidak di perangkat save-data
+  // Paralaks pointer — fine pointer ±3°/±6°, coarse (sentuh) ±1°/±2°
   const sceneRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (reduced || saveData) return
-    const mq = window.matchMedia('(hover: hover) and (pointer: fine)')
-    if (!mq.matches) return
+    const isFine = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+    const range = isFine ? { x: 3, y: 6 } : { x: 1, y: 2 }
     const onMove = (e: PointerEvent) => {
       const el = sceneRef.current
       if (!el || document.hidden) return
       const rect = el.getBoundingClientRect()
       const cx = ((e.clientX - rect.left) / rect.width - 0.5) * 2
       const cy = ((e.clientY - rect.top) / rect.height - 0.5) * 2
-      setTilt({ x: Math.max(-3, Math.min(3, cy * -3)), y: Math.max(-6, Math.min(6, cx * 6)) })
+      setTilt({ x: Math.max(-range.x, Math.min(range.x, cy * -range.x)), y: Math.max(-range.y, Math.min(range.y, cx * range.y)) })
     }
     const onLeave = () => setTilt({ x: 0, y: 0 })
-    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('blur', onLeave)
-    sceneRef.current?.addEventListener('pointerleave', onLeave)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('blur', onLeave)
     }
   }, [reduced, saveData])
+
+  // Deteksi layar sempit via ResizeObserver pada kontainer adegan
+  useEffect(() => {
+    const el = sceneRef.current; if (!el) return
+    const obs = new ResizeObserver((entries) => { setNarrow(entries[0].contentRect.width < 900) })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
 
   // Scroll input ke tengah saat keyboard HP terbuka
   useEffect(() => {
@@ -183,13 +191,16 @@ export default function Login() {
   return (
     <LazyMotion features={domAnimation}>
       <style>{`
+        @keyframes scene-float-a { 0%,100%{transform:translateY(0) rotate(0.4deg)} 40%{transform:translateY(-11px) rotate(-0.5deg)} 70%{transform:translateY(-5px) rotate(0.6deg)} }
+        @keyframes scene-float-b { 0%,100%{transform:translateY(0) rotate(-0.3deg)} 30%{transform:translateY(-8px) rotate(0.4deg)} 65%{transform:translateY(-15px) rotate(-0.3deg)} }
+        @keyframes scene-float-c { 0%,100%{transform:translateY(0) rotate(0.2deg)} 50%{transform:translateY(-10px) rotate(-0.2deg)} }
+        [data-floatcard="a"] { animation: scene-float-a 9s ease-in-out infinite; }
+        [data-floatcard="b"] { animation: scene-float-b 10.5s ease-in-out infinite 1.5s; }
+        [data-floatcard="c"] { animation: scene-float-c 8s ease-in-out infinite 3s; }
         @media (prefers-reduced-motion: reduce) {
           [data-floatcard] { animation: none !important; }
         }
-        /* Sembunyikan adegan 3D di layar sempit agar tidak menimpa kartu form */
-        @media (max-width: 899px) {
-          .login-scene { display: none !important; }
-        }
+        [data-save-data] [data-floatcard] { animation: none !important; }
       `}</style>
 
       {/* Latar layar penuh + adegan 3D */}
@@ -197,10 +208,10 @@ export default function Login() {
         ref={sceneRef}
         data-save-data={saveData || undefined}
         aria-hidden="true"
-        style={{ position: 'fixed', inset: 0, background: 'var(--bg)', overflow: 'hidden' }}
+        style={{ position: 'fixed', inset: 0, background: 'var(--bg)', overflow: 'hidden', pointerEvents: 'none' }}
       >
         <div className="login-scene" style={{ position: 'absolute', inset: 0 }}>
-          <LoginScene tiltX={tilt.x} tiltY={tilt.y} reduced={!!reduced || saveData} />
+          <LoginScene tiltX={tilt.x} tiltY={tilt.y} reduced={!!reduced || saveData} narrow={narrow} />
         </div>
       </div>
 
@@ -221,6 +232,7 @@ export default function Login() {
         style={{
           position: 'fixed',
           inset: 0,
+          zIndex: 1,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',

@@ -420,6 +420,13 @@ export default function App() {
 
   // Mode pratinjau: render Shell tanpa auth (hanya saat VITE_SHELL_PREVIEW=true)
   if (import.meta.env.VITE_SHELL_PREVIEW === 'true') {
+    if (window.location.hash === '#login-preview') {
+      return (
+        <ThemeProvider>
+          <Login />
+        </ThemeProvider>
+      )
+    }
     return (
       <ThemeProvider>
         <StoreProvider userId="__preview__">

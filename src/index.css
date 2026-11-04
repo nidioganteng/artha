@@ -37,9 +37,9 @@
   --scene-1:      #D6E8D8;
   --scene-2:      #A8C9AD;
   --scene-3:      #84CC16;
-  --scene-glow:   rgba(132,204,22,0.18);
-  --scene-card-a: rgba(26,58,40,0.08);
-  --scene-card-b: rgba(132,204,22,0.10);
+  --scene-glow:   rgba(132,204,22,0.30);
+  --scene-card-a: rgba(26,58,40,0.14);
+  --scene-card-b: rgba(132,204,22,0.18);
   --scene-card-c: rgba(255,255,255,0.70);
   --radius-xs:    6px;
   --radius-sm:    10px;
@@ -119,9 +119,9 @@
   --scene-1:      #E8E2D6;
   --scene-2:      #C8BFB0;
   --scene-3:      #6B8F74;
-  --scene-glow:   rgba(107,143,116,0.20);
-  --scene-card-a: rgba(45,82,64,0.08);
-  --scene-card-b: rgba(107,143,116,0.12);
+  --scene-glow:   rgba(107,143,116,0.30);
+  --scene-card-a: rgba(45,82,64,0.14);
+  --scene-card-b: rgba(107,143,116,0.20);
   --scene-card-c: rgba(255,255,255,0.72);
   --radius-xs:    6px;
   --radius-sm:    10px;
