@@ -352,6 +352,9 @@ export function portfolioSeries(
       const cost = qty * avgCost
 
       // Tentukan harga
+      // Bulan ini: live dulu, lalu avgCost (sama dengan computePosition saat harga null)
+      // agar titik terakhir grafik konsisten dengan Ringkasan Portofolio.
+      // Bulan lampau: snapshot terdekat, harga implisit dari trade, lalu carry-forward.
       let price: number | null = null
       let quality: PriceQuality = 'estimate'
       if (mk === todayMonth) {
@@ -359,27 +362,29 @@ export function portfolioSeries(
         if (live != null && Number.isFinite(live) && live > 0) {
           price = live
           quality = 'market'
+        } else if (avgCost > 0) {
+          price = avgCost
+          quality = 'estimate'
         }
-      }
-      if (price == null) {
+      } else {
         const snap = priceAtMonthEnd(asset.id, mk, priceHistory)
         if (snap != null && Number.isFinite(snap) && snap > 0) {
           price = snap
           quality = 'market'
         }
-      }
-      if (price == null) {
-        const implicit = implicitPriceAtMonthEnd(asset.id, mk, relevantTrades)
-        if (implicit != null && Number.isFinite(implicit) && implicit > 0) {
-          price = implicit
-          quality = 'estimate'
+        if (price == null) {
+          const implicit = implicitPriceAtMonthEnd(asset.id, mk, relevantTrades)
+          if (implicit != null && Number.isFinite(implicit) && implicit > 0) {
+            price = implicit
+            quality = 'estimate'
+          }
         }
-      }
-      if (price == null) {
-        const prev = lastKnownPrice.get(asset.id)
-        if (prev != null && prev > 0) {
-          price = prev
-          quality = 'estimate'
+        if (price == null) {
+          const prev = lastKnownPrice.get(asset.id)
+          if (prev != null && prev > 0) {
+            price = prev
+            quality = 'estimate'
+          }
         }
       }
       if (price == null) {

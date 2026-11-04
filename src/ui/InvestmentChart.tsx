@@ -404,6 +404,11 @@ export function InvestmentChart({
                 </span>
               </div>
             )}
+            {last && last.quality === 'estimate' && (
+              <div className="muted" style={{ fontSize: 11 }} title="Harga live tidak tersedia; nilai dihitung dari harga rata-rata beli">
+                perkiraan
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -349,6 +349,39 @@ ok('formatPercent negatif besar aman', formatPercent(-1) === '-100,00%')
   const feb = ptsSnap.find((p) => p.month === '2026-02')
   ok('portfolioSeries snapshot sebagai harga Feb',
     feb !== undefined && near(feb.value, 550_000_000) && feb.quality === 'market')
+
+  // 20.13 Bulan ini tanpa harga live → pakai avgCost (konsisten dengan computePosition)
+  // Dua beli dengan harga berbeda: avgCost = (500M + 700M * 1) / 2 = 600M
+  const tNoLive = [
+    { id: 'n1', asset_id: 'a1', side: 'buy' as const, quantity: 1, price_per_unit: 500_000_000, fee: 0, traded_on: '2026-05-01' },
+    { id: 'n2', asset_id: 'a1', side: 'buy' as const, quantity: 1, price_per_unit: 700_000_000, fee: 0, traded_on: '2026-06-01' },
+  ]
+  // Snapshot hari ini (sengaja beda dari avgCost untuk membuktikan snapshot tidak dipakai)
+  const snapToday = [{ asset_id: 'a1', date: '2026-06-15', price: 999_000_000, source: 'manual' }]
+  const ptsNoLive = portfolioSeries(tNoLive, assets, snapToday, {}, 'all', 'all', '2026-06-15')
+  const lastNoLive = ptsNoLive[ptsNoLive.length - 1]
+  const posNoLive = computePosition(
+    tNoLive.map((t) => ({ side: t.side, quantity: t.quantity, price: t.price_per_unit, fee: t.fee, date: t.traded_on })),
+    null,
+  )
+  ok('portfolioSeries bulan ini tanpa live: value == computePosition.value (avgCost)',
+    near(lastNoLive.value, posNoLive.value))
+  ok('portfolioSeries bulan ini tanpa live: quality estimate',
+    lastNoLive.quality === 'estimate')
+  ok('portfolioSeries bulan lampau dengan snapshot: nilai snapshot dipakai (bukan avgCost)',
+    near(feb?.value ?? 0, 550_000_000))
+
+  // 20.14 Bulan ini dengan harga live → konsisten dengan computePosition(live)
+  const ptsWithLive = portfolioSeries(tNoLive, assets, [], { BTC: 800_000_000 }, 'all', 'all', '2026-06-15')
+  const lastWithLive = ptsWithLive[ptsWithLive.length - 1]
+  const posWithLive = computePosition(
+    tNoLive.map((t) => ({ side: t.side, quantity: t.quantity, price: t.price_per_unit, fee: t.fee, date: t.traded_on })),
+    800_000_000,
+  )
+  ok('portfolioSeries bulan ini dengan live: value == computePosition.value (live)',
+    near(lastWithLive.value, posWithLive.value))
+  ok('portfolioSeries bulan ini dengan live: quality market',
+    lastWithLive.quality === 'market')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
