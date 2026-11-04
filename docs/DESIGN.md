@@ -662,3 +662,39 @@ Implementasi: `contributorShares()` di `src/lib/calc.ts`. Fungsi ini murni (tanp
 ### Kontributor `null`
 
 Trade tanpa `contributor_id` ditampilkan dengan label "Tanpa nama" di kalkulasi porsi, tetapi chip kontributor tidak muncul di baris riwayat.
+
+---
+
+## 16. Filter Periode Dashboard
+
+### Tiga Pilihan Periode
+
+| Pilihan | Perilaku | Label ringkasan |
+|---|---|---|
+| Semua | Dari tanggal paling awal sampai hari ini | "Semua data (Nov 2025 sampai Nov 2026)" |
+| Bulan ini | Tanggal 1 sampai akhir bulan berjalan | "November 2026" |
+| Kustom | Rentang bulan yang dipilih pengguna (inklusif) | "Jan 2026 sampai Okt 2026 (10 bulan)" |
+
+Default: **Semua**. Disimpan di `localStorage` key `artha:dashPeriod`.
+
+### Semantik Kartu per Periode
+
+| Kartu | Semantik |
+|---|---|
+| KPI Pemasukan, Pengeluaran, Investasi (beli), Sisa periode | Jumlah dalam periode terpilih |
+| Saldo Rekening | Posisi saldo di akhir periode (atau hari ini bila periode mencakup hari ini). Teks "per [tanggal]" ditampilkan. |
+| Pengeluaran per Kategori | Total dalam periode |
+| Pemasukan vs Pengeluaran | Per bulan dalam periode, maksimal 12 bulan terakhir. Bila lebih dari 12 bulan, tampil catatan "menampilkan 12 bulan terakhir". |
+| Portofolio Investasi | Nilai sekarang, tidak bergantung periode. Label "per hari ini". |
+| Transaksi Terkini | 5 transaksi terbaru dalam periode |
+
+### Pemilih Periode (UI)
+
+- Segmented control tiga opsi (Semua / Bulan ini / Kustom), lebar penuh di HP, ringkas di desktop
+- Tinggi 44px, `role="radiogroup"`, navigasi panah keyboard
+- Memilih Kustom membuka pemilih rentang bulan:
+  - HP (< 768px): bottom sheet via komponen Sheet
+  - Desktop/tablet (>= 768px): popover via portal `createPortal(..., document.body)`
+- Rentang bulan: navigasi tahun (panah kiri/kanan), grid 4x3 bulan, titik untuk bulan yang ada data, bulan masa depan dinonaktifkan
+- Preset cepat: "3 bulan terakhir", "6 bulan terakhir", "Tahun ini", "12 bulan terakhir"
+- Mode investasi: pemilih periode disembunyikan (dashboard investasi tidak bergantung periode)
