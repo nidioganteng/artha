@@ -109,6 +109,11 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         backgroundColor: 'var(--bg)',
       }}
     >
+      {/* ── Skip link — aksesibilitas keyboard ── */}
+      <a href="#main-content" className="skip-link">
+        Langsung ke konten
+      </a>
+
       {/* ── Header — all sizes, single ModeToggle here ── */}
       <header
         style={{
@@ -137,7 +142,10 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           Artha
         </span>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <SyncBadge onGoSettings={goSettings} />
+          {/* SyncBadge di header hanya muncul di bawah lg (md ke bawah); lg+ pakai yang ada di sidebar */}
+          <div className="lg:hidden">
+            <SyncBadge onGoSettings={goSettings} />
+          </div>
           <ModeToggle />
         </div>
       </header>
@@ -226,6 +234,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
 
         {/* ── Main content ── */}
         <main
+          id="main-content"
           className="pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+16px)] md:pb-5 lg:px-8 lg:pt-8"
           style={{
             flex: 1,
@@ -295,46 +304,48 @@ function Shell({ onLogout }: { onLogout: () => void }) {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: 3,
                 width: '100%',
                 minHeight: 64,
+                padding: '8px 4px 4px',
                 border: 'none',
                 cursor: 'pointer',
                 background: 'transparent',
                 fontFamily: 'inherit',
-                padding: 0,
               }}
             >
-              {/* Pill: inline-flex membungkus ikon + label.
-                  maxWidth 58% dari lebar sel sehingga < 60% dan tidak memenuhi sel. */}
+              {/* Pill hanya membungkus ikon — lebar tetap, tidak memengaruhi lebar label */}
               <span
                 style={{
                   display: 'inline-flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 2,
-                  padding: '4px 8px',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 26,
                   borderRadius: 'var(--radius-xl)',
                   background: active ? 'var(--primary)' : 'transparent',
                   color: active ? 'var(--primary-fg)' : 'var(--text-3)',
                   transition: 'background 150ms ease-out, color 150ms ease-out',
-                  maxWidth: '58%',
-                  overflow: 'hidden',
+                  flexShrink: 0,
                 }}
               >
                 <Icon size={18} />
-                <span
-                  style={{
-                    fontSize: 9,
-                    fontWeight: active ? 600 : 400,
-                    lineHeight: 1.2,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: '100%',
-                  }}
-                >
-                  {label}
-                </span>
+              </span>
+              {/* Label di luar pill supaya bisa menggunakan lebar penuh sel */}
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: active ? 600 : 400,
+                  lineHeight: 1.2,
+                  color: active ? 'var(--primary)' : 'var(--text-3)',
+                  transition: 'color 150ms ease-out',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '95%',
+                }}
+              >
+                {label}
               </span>
             </button>
           )
