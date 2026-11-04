@@ -609,3 +609,56 @@ Tilt dibatasi ±12° horisontal dan ±8° vertikal. Selalu reset ke netral saat 
 | Bahasa | `lang="id"` pada `<html>` |
 
 **Verifikasi kontras:** Jalankan `npm run check:contrast` untuk memverifikasi semua 72 pasangan teks/latar di keempat kombinasi. Script ini wajib lolos sebelum merge ke main.
+
+---
+
+## 14. Mode Akun
+
+### Dua mode
+
+| Mode | Deskripsi |
+|---|---|
+| `lengkap` | Semua fitur: transaksi, rutin, laporan, dan investasi. |
+| `investasi` | Hanya fitur investasi. Tab Transaksi dan Laporan disembunyikan dari navigasi. |
+
+Mode disimpan di tabel `profiles` (kolom `mode`), diakses via `useMode()` di `src/lib/useMode.ts`. Nilai dimuat dari cache localStorage (key `kq:cache:{userId}`) sehingga tidak ada kedip saat pertama render.
+
+### Perilaku navigasi
+
+- Saat mode berubah ke `investasi`, tab yang aktif di-redirect ke `inv` jika tab tersebut tidak valid.
+- `ALL_SIDE_TABS` dan `ALL_TABS` di `App.tsx` adalah daftar lengkap; `sideTabs` dan `mobileTabs` adalah hasil filter berdasarkan mode.
+- `data-account-mode={accountMode}` dipasang di div shell terluar untuk pengujian layout.
+
+### Kunci mode (`mode_locked`)
+
+Jika `mode_locked = true` di profil pengguna, tombol ganti mode di Pengaturan dinonaktifkan. Ini untuk skenario multi-pengguna di masa depan di mana admin mengunci konfigurasi.
+
+---
+
+## 15. Kontributor dan Porsi Investasi
+
+### Tabel `contributors`
+
+Setiap baris mewakili satu orang yang ikut menyetorkan dana ke portofolio investasi. Relasi: `trades.contributor_id` FK ke `contributors.id` (nullable, `ON DELETE SET NULL`).
+
+### Formula porsi
+
+```
+netDeposit(c) = sum(beli: qty*price+fee) - sum(jual: qty*price-fee)
+totalPositiveDeposit = sum of netDeposit(c) for c where netDeposit > 0
+sharePct(c) = netDeposit(c) / totalPositiveDeposit   (0 if netDeposit <= 0)
+shareValue(c) = sharePct(c) * portfolioValue
+sharePL(c) = shareValue(c) - netDeposit(c)           (0 if capped)
+```
+
+Implementasi: `contributorShares()` di `src/lib/calc.ts`. Fungsi ini murni (tanpa efek samping) dan diuji di `scripts/check-calc.ts` (uji 22.1–22.13).
+
+### Tampilan
+
+- Halaman Investasi: chip kontributor di tiap baris riwayat; select "Disetor oleh" di form catat DCA.
+- Dashboard: kartu "Porsi Kontributor" muncul jika ada minimal satu kontributor dengan trades.
+- Pengaturan: seksi "Kontributor" untuk tambah/ubah/hapus kontributor dengan validasi nama unik.
+
+### Kontributor `null`
+
+Trade tanpa `contributor_id` ditampilkan dengan label "Tanpa nama" di kalkulasi porsi, tetapi chip kontributor tidak muncul di baris riwayat.

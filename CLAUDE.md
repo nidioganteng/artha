@@ -36,6 +36,7 @@ supabase/schema.sql      tabel, RLS, trigger data awal untuk user baru (idempote
 src/lib/calc.ts          fungsi murni: rata-rata beli (moving average), ROI, CAGR, XIRR
 src/lib/store.tsx        store lokal-dulu + antrean sinkron ke Supabase
 src/lib/theme.tsx        ThemeProvider + useTheme: mode (system/light/dark), palet (a/b)
+src/lib/useMode.ts       useMode(): baca/tulis mode akun (lengkap/investasi) dari profiles
 src/lib/usePortfolio.ts  gabungan trade + harga pasar menjadi posisi per aset
 src/lib/prices.ts        fetch /api/prices + cache localStorage
 src/lib/format.ts        format Rupiah, tanggal lokal, parseNum (format angka Indonesia)
@@ -53,7 +54,7 @@ scripts/check-layout.ts  uji aturan layout shell: nav eksklusif, portal, transfo
 
 1. **Offline-first.** Semua perubahan lewat `save()` dan `remove()` dari `useStore()`. Jangan memanggil Supabase langsung dari halaman. Store menyimpan perubahan ke antrean lokal lalu mengirimnya saat online.
 2. **ID dibuat di client** (`crypto.randomUUID()`), sinkron memakai upsert, jadi aman diulang dan tidak membuat data dobel.
-3. **Setiap tabel punya `user_id`** dan RLS `user_id = auth.uid()`. Tabel baru wajib ikut pola ini (tambahkan ke daftar di `schema.sql`) dan didaftarkan di `TABLES` dan `NUMERIC` pada `store.tsx`.
+3. **Setiap tabel punya `user_id`** dan RLS `user_id = auth.uid()`. Tabel baru wajib ikut pola ini (tambahkan ke daftar di `schema.sql`) dan didaftarkan di `TABLES` dan `NUMERIC` pada `store.tsx`. Tabel opsional (belum tentu ada sebelum migrasi) didaftarkan di `OPTIONAL_TABLES`.
 4. **Logika hitung investasi hanya di `calc.ts`** sebagai fungsi murni tanpa dependensi. Setiap perubahan rumus harus disertai uji di `scripts/check-calc.ts`.
 5. **Angka dari Supabase bisa berupa string.** Kolom `numeric` dinormalisasi lewat `NUMERIC` di `store.tsx`. Input angka dari user diparse dengan `parseNum()` (mendukung "1.500.000" dan "0,0025"). Kuantitas aset memakai `dotIsDecimal = true`.
 6. **Tanggal memakai zona waktu lokal** (`todayISO()`), bukan `toISOString()`, karena pemakai di UTC+8.
@@ -70,6 +71,8 @@ scripts/check-layout.ts  uji aturan layout shell: nav eksklusif, portal, transfo
     `--z-header:10` < `--z-nav:20` < `--z-backdrop:30` < `--z-sheet:40` < `--z-toast:50`.
     Gunakan token ini, jangan nilai angka mentah.
 13. **ModeToggle hanya satu: di header**, terlihat di semua ukuran layar. Jangan duplikasi di sidebar atau tempat lain.
+14. **Tab bar: jangan taruh `display` di inline style nav.** `display: grid` atau `display: flex` pada elemen nav yang punya `md:hidden` akan mengalahkan Tailwind dan membuat nav selalu terlihat. Taruh di div anak di dalam nav.
+15. **Mode akun (lengkap/investasi):** Baca via `useMode()`. Mode mengubah tampilan saja, tidak menghapus data. `profiles` dan `contributors` ada di `OPTIONAL_TABLES` sehingga error tabel belum ada tidak menyebabkan crash. Formulir daftar melewatkan mode via `signUp({ options: { data: { mode } } })`.
 
 ## Sistem Tema
 
@@ -95,9 +98,7 @@ Pengguna yang sudah menyimpan pilihan di localStorage tetap menggunakan palet me
 
 ## Status
 
-UI overhaul (5 fase) + perbaikan 6 bug layout selesai. Build lolos, 21 uji kalkulasi lolos, 37 uji sinkron lolos, 72 uji kontras WCAG AA lolos, 20 uji layout lolos. **Belum pernah dijalankan end to end dengan project Supabase sungguhan**, jadi bug integrasi (auth, RLS, sinkron offline, PWA install) kemungkinan masih ada. Prioritas pertama adalah memverifikasi alur itu.
-
-Branch `prep-public` sedang menyiapkan repo ini untuk dipublikasikan di GitHub: membersihkan file sensitif, menambah header keamanan, memperbaiki beberapa bug, dan menulis dokumentasi publik.
+UI overhaul (5 fase) + perbaikan 6 bug layout selesai. Fitur Mode Akun (lengkap/investasi) + Kontributor selesai di branch `feat-account-mode`. Build lolos, 35 uji kalkulasi lolos (termasuk contributorShares), 48 uji sinkron lolos (termasuk profiles/contributors), 72 uji kontras WCAG AA lolos, 253 uji layout lolos. **Belum pernah dijalankan end to end dengan project Supabase sungguhan**, jadi bug integrasi (auth, RLS, sinkron offline, PWA install) kemungkinan masih ada. Prioritas pertama adalah memverifikasi alur itu. Migrasi `supabase/migrations/20261104_account_mode.sql` harus dijalankan sebelum fitur ini aktif di produksi.
 
 ## Backlog (urutan kasar)
 
