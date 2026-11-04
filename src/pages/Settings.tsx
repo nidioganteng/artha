@@ -107,7 +107,7 @@ function ListRow({ label, sub, onDelete }: { label: string; sub?: string; onDele
         className="btn-ghost"
         aria-label={`Hapus ${label}`}
         onClick={onDelete}
-        style={{ padding: 8, minHeight: 36, minWidth: 36, border: 'none', flexShrink: 0 }}
+        style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', flexShrink: 0 }}
       >
         ✕
       </button>
@@ -142,6 +142,10 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
   // Hapus Rekening (Confirm dengan pesan dinamis)
   const [confirmAcc, setConfirmAcc] = useState<{ id: string; name: string } | null>(null)
   const [blockedAcc, setBlockedAcc] = useState<{ name: string; message: string } | null>(null)
+
+  // Hapus Kategori, Platform, Aset
+  const [confirmDel, setConfirmDel] = useState<{ table: 'categories' | 'platforms' | 'assets'; id: string; label: string } | null>(null)
+  const [blockedAsset, setBlockedAsset] = useState<{ name: string; message: string } | null>(null)
 
   // Saldo saat ini per rekening (dari ledger)
   const currentBalances = useMemo(() => {
@@ -251,17 +255,18 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
   }
 
   function del(
-    table: 'categories' | 'accounts' | 'platforms' | 'assets',
+    table: 'categories' | 'platforms' | 'assets',
     id: string,
     label: string,
   ) {
     if (table === 'assets' && db.trades.some((t) => t.asset_id === id)) {
-      alert(
-        'Aset ini masih punya catatan pembelian/penjualan. Hapus catatannya dulu di tab Investasi.',
-      )
+      setBlockedAsset({
+        name: label,
+        message: 'Aset ini masih punya catatan pembelian/penjualan. Hapus catatannya dulu di tab Investasi.',
+      })
       return
     }
-    if (confirm(`Hapus "${label}"?`)) remove(table, id)
+    setConfirmDel({ table, id, label })
   }
 
   const modeOptions: { value: Mode; label: string; Icon: typeof Sun }[] = [
@@ -334,7 +339,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                           cursor: 'pointer',
                           boxShadow: active ? 'var(--shadow-sm)' : 'none',
                           transition: 'all 150ms ease-out',
-                          minHeight: 36,
+                          minHeight: 44,
                         }}
                       >
                         <Icon size={14} />
@@ -667,8 +672,8 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                           onClick={() => openEditAcc(a)}
                           style={{
                             padding: 8,
-                            minHeight: 36,
-                            minWidth: 36,
+                            minHeight: 44,
+                            minWidth: 44,
                             border: 'none',
                             flexShrink: 0,
                           }}
@@ -681,8 +686,8 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                           onClick={() => tryDeleteAcc(a)}
                           style={{
                             padding: 8,
-                            minHeight: 36,
-                            minWidth: 36,
+                            minHeight: 44,
+                            minWidth: 44,
                             border: 'none',
                             flexShrink: 0,
                           }}
@@ -727,7 +732,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
           {/* Kategori */}
           <div className="card" style={{ padding: 20 }}>
             <Section title="Kategori Transaksi">
-              <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+              <div>
                 {db.categories.length === 0 && (
                   <p className="muted" style={{ fontSize: 13 }}>Belum ada kategori.</p>
                 )}
@@ -920,6 +925,31 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
         confirmLabel="Mengerti"
         onConfirm={() => setBlockedAcc(null)}
         onCancel={() => setBlockedAcc(null)}
+      />
+
+      {/* ── Konfirmasi hapus kategori/platform/aset ──── */}
+      <ConfirmDialog
+        open={confirmDel !== null}
+        title="Hapus"
+        message={confirmDel ? `Hapus "${confirmDel.label}"?` : ''}
+        confirmLabel="Hapus"
+        onConfirm={() => {
+          if (confirmDel) {
+            remove(confirmDel.table, confirmDel.id)
+            setConfirmDel(null)
+          }
+        }}
+        onCancel={() => setConfirmDel(null)}
+      />
+
+      {/* ── Aset tidak bisa dihapus ───────────────────── */}
+      <ConfirmDialog
+        open={blockedAsset !== null}
+        title={blockedAsset ? `Tidak bisa menghapus ${blockedAsset.name}` : 'Tidak bisa menghapus'}
+        message={blockedAsset?.message ?? ''}
+        confirmLabel="Mengerti"
+        onConfirm={() => setBlockedAsset(null)}
+        onCancel={() => setBlockedAsset(null)}
       />
     </div>
   )
