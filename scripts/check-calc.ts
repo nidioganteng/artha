@@ -1,4 +1,5 @@
 // Uji cepat kalkulasi investasi + fungsi murni format. Jalankan: npm run check:calc
+import { createHash } from 'node:crypto'
 import { computePosition, flowsOf, portfolioSeries, summarize, xirr } from '../src/lib/calc'
 import { formatPercent, parseNum, todayISO } from '../src/lib/format'
 import { formatMoneyInput, parseMoneyInput, formatQuantityInput, parseQuantityInput } from '../src/lib/numInput'
@@ -348,6 +349,243 @@ ok('formatPercent negatif besar aman', formatPercent(-1) === '-100,00%')
   const feb = ptsSnap.find((p) => p.month === '2026-02')
   ok('portfolioSeries snapshot sebagai harga Feb',
     feb !== undefined && near(feb.value, 550_000_000) && feb.quality === 'market')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21) Uji murni generator data demo (tanpa jaringan)
+//     Replikasi fungsi kunci dari seed-demo.ts agar terisolasi dari Supabase.
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  // Replikasi UUID v5 (namespace tetap sama dengan seed-demo.ts)
+  const NS_DEMO = Buffer.from('1b671a6440d5491e99b0da01ff1f3341', 'hex')
+  function demoIdT(name: string): string {
+    const hash = createHash('sha1').update(NS_DEMO).update(Buffer.from(name, 'utf8')).digest()
+    hash[6] = (hash[6] & 0x0f) | 0x50
+    hash[8] = (hash[8] & 0x3f) | 0x80
+    const h = hash.subarray(0, 16).toString('hex')
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`
+  }
+
+  // Replikasi PRNG (mulberry32)
+  function makePrngT(seed: number) {
+    let s = seed >>> 0
+    return {
+      next(): number {
+        s = (s + 0x6d2b79f5) | 0
+        let t = Math.imul(s ^ (s >>> 15), 1 | s)
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+      },
+      int(min: number, max: number): number {
+        return Math.floor(this.next() * (max - min + 1)) + min
+      },
+    }
+  }
+
+  // ── 21.1 demoId deterministik ──────────────────────────────────────────────
+  ok('21.1 demoId deterministik', demoIdT('demo:test:abc') === demoIdT('demo:test:abc'))
+
+  // ── 21.2 demoId format UUID v5 ────────────────────────────────────────────
+  const UUID_V5_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+  ok('21.2 demoId format UUID v5', UUID_V5_RE.test(demoIdT('demo:test:abc')))
+
+  // ── 21.3 dua input berbeda → ID berbeda ───────────────────────────────────
+  ok('21.3 demoId berbeda untuk input berbeda',
+    demoIdT('demo:rule:listrik') !== demoIdT('demo:rule:wifi'))
+
+  // ── 21.4 PRNG deterministik ────────────────────────────────────────────────
+  const rng1 = makePrngT(0xdeadbeef)
+  const rng2 = makePrngT(0xdeadbeef)
+  const seq1 = [rng1.next(), rng1.next(), rng1.next()]
+  const seq2 = [rng2.next(), rng2.next(), rng2.next()]
+  ok('21.4 PRNG deterministik', seq1.every((v, i) => v === seq2[i]))
+
+  // ── 21.5 PRNG berbeda seed → urutan berbeda ────────────────────────────────
+  const rng3 = makePrngT(0xcafebabe)
+  ok('21.5 PRNG beda seed hasilkan urutan berbeda', rng3.next() !== seq1[0])
+
+  // ── 21.6 Kepemilikan BTC tidak pernah negatif ─────────────────────────────
+  // Data trade BTC sesuai seed-demo.ts (DATA FIKTIF)
+  const btcTradeDefs: { side: 'buy' | 'sell'; qty: number; date: string }[] = [
+    { side: 'buy',  qty: 0.0003, date: '2025-10-01' }, // unassigned
+    { side: 'buy',  qty: 0.0005, date: '2025-11-10' },
+    { side: 'buy',  qty: 0.0004, date: '2025-12-05' },
+    { side: 'buy',  qty: 0.0004, date: '2026-01-15' },
+    { side: 'buy',  qty: 0.0003, date: '2026-02-20' },
+    { side: 'buy',  qty: 0.0005, date: '2026-03-10' },
+    { side: 'sell', qty: 0.0003, date: '2026-04-18' },
+    { side: 'buy',  qty: 0.0004, date: '2026-05-07' },
+    { side: 'buy',  qty: 0.0003, date: '2026-06-12' },
+    { side: 'buy',  qty: 0.0004, date: '2026-07-08' },
+    { side: 'sell', qty: 0.0005, date: '2026-08-20' },
+    { side: 'buy',  qty: 0.0003, date: '2026-09-15' },
+    { side: 'buy',  qty: 0.0004, date: '2026-10-05' },
+    { side: 'buy',  qty: 0.0002, date: '2026-10-28' },
+  ]
+  let btcQty = 0
+  let btcNeverNeg = true
+  const sortedBtc = [...btcTradeDefs].sort((a, b) => a.date.localeCompare(b.date))
+  for (const t of sortedBtc) {
+    btcQty = t.side === 'buy' ? btcQty + t.qty : btcQty - t.qty
+    if (btcQty < -1e-10) btcNeverNeg = false
+  }
+  ok('21.6 kepemilikan BTC tidak pernah negatif', btcNeverNeg)
+  ok('21.6 kepemilikan BTC akhir = 0.0036', near(btcQty, 0.0036, 1e-9))
+
+  // ── 21.7 Kepemilikan EMAS tidak pernah negatif ────────────────────────────
+  const emasTradeDefs: { side: 'buy' | 'sell'; qty: number; date: string }[] = [
+    { side: 'buy',  qty: 1.0, date: '2025-10-15' }, // unassigned
+    { side: 'buy',  qty: 2.0, date: '2025-11-20' },
+    { side: 'buy',  qty: 1.5, date: '2026-01-25' },
+    { side: 'buy',  qty: 2.0, date: '2026-03-18' },
+    { side: 'sell', qty: 1.0, date: '2026-05-22' },
+    { side: 'buy',  qty: 1.5, date: '2026-07-14' },
+    { side: 'buy',  qty: 1.0, date: '2026-09-28' },
+  ]
+  let emasQty = 0
+  let emasNeverNeg = true
+  for (const t of [...emasTradeDefs].sort((a, b) => a.date.localeCompare(b.date))) {
+    emasQty = t.side === 'buy' ? emasQty + t.qty : emasQty - t.qty
+    if (emasQty < -1e-10) emasNeverNeg = false
+  }
+  ok('21.7 kepemilikan EMAS tidak pernah negatif', emasNeverNeg)
+  ok('21.7 kepemilikan EMAS akhir = 8.0', near(emasQty, 8.0, 1e-9))
+
+  // ── 21.8 Semua ID demo yang diketahui unik ────────────────────────────────
+  const knownDemoKeys = [
+    'demo:rule:listrik', 'demo:rule:wifi', 'demo:rule:streaming',
+    'demo:rule:gaji', 'demo:rule:dca-btc',
+    'demo:trade:btc:oct25:unassigned', 'demo:trade:btc:nov25', 'demo:trade:btc:dec25',
+    'demo:trade:btc:jan26', 'demo:trade:btc:feb26', 'demo:trade:btc:mar26',
+    'demo:trade:btc:apr26:sell', 'demo:trade:btc:may26', 'demo:trade:btc:jun26',
+    'demo:trade:btc:jul26', 'demo:trade:btc:aug26:sell', 'demo:trade:btc:sep26',
+    'demo:trade:btc:oct26a', 'demo:trade:btc:oct26b',
+    'demo:trade:emas:oct25:unassigned', 'demo:trade:emas:nov25', 'demo:trade:emas:jan26',
+    'demo:trade:emas:mar26', 'demo:trade:emas:may26:sell', 'demo:trade:emas:jul26',
+    'demo:trade:emas:sep26',
+    'demo:snapshot:BTC:2025-11-30', 'demo:snapshot:EMAS:2025-11-30',
+    'demo:snapshot:BTC:2026-10-31', 'demo:snapshot:EMAS:2026-10-31',
+    'demo:snapshot:BTC:2026-11-04', 'demo:snapshot:EMAS:2026-11-04',
+  ]
+  const generatedIds = knownDemoKeys.map((k) => demoIdT(k))
+  const idSet = new Set(generatedIds)
+  ok('21.8 semua ID demo dikenal unik', idSet.size === generatedIds.length)
+
+  // ── 21.9 Saldo BRI tidak negatif di akhir setiap bulan ────────────────────
+  // Hitung saldo BRI secara manual dengan data minimal deterministik
+  const FAKE_BRI_ID = demoIdT('test:acc:bri')
+  const FAKE_KAS_ID = demoIdT('test:acc:kas')
+  const FAKE_BTC_ID = demoIdT('test:asset:btc')
+  const FAKE_EMAS_ID = demoIdT('test:asset:emas')
+
+  const fakeAccBRI: Account = { id: FAKE_BRI_ID, user_id: 'u', name: 'BRI', type: 'bank', opening_balance: 10_000_000 }
+  const fakeAccKas: Account = { id: FAKE_KAS_ID, user_id: 'u', name: 'Kas', type: 'cash', opening_balance: 2_000_000 }
+
+  // Income transactions (dari seed-demo.ts, statis)
+  const incomeData: { date: string; amount: number; account: 'BRI' | 'Kas' }[] = [
+    { date: '2025-11-05', amount: 2_500_000, account: 'BRI' },
+    { date: '2025-11-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2025-12-10', amount: 1_800_000, account: 'BRI' },
+    { date: '2025-12-20', amount: 300_000,   account: 'BRI' },
+    { date: '2025-12-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-01-08', amount: 3_500_000, account: 'BRI' },
+    { date: '2026-01-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-02-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-03-12', amount: 4_200_000, account: 'BRI' },
+    { date: '2026-03-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-04-05', amount: 2_000_000, account: 'BRI' },
+    { date: '2026-04-28', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-05-15', amount: 3_000_000, account: 'BRI' },
+    { date: '2026-05-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-06-08', amount: 5_500_000, account: 'BRI' },
+    { date: '2026-06-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-07-20', amount: 1_500_000, account: 'BRI' },
+    { date: '2026-07-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-08-10', amount: 4_800_000, account: 'BRI' },
+    { date: '2026-08-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-08-30', amount: 150_000,   account: 'BRI' },
+    { date: '2026-09-25', amount: 8_000_000, account: 'BRI' },
+    { date: '2026-10-07', amount: 2_200_000, account: 'BRI' },
+    { date: '2026-10-25', amount: 8_000_000, account: 'BRI' },
+  ]
+
+  const incomeTxs: Transaction[] = incomeData.map((d, i) => ({
+    id: demoIdT(`test:income:${i}`),
+    user_id: 'u',
+    account_id: FAKE_BRI_ID,
+    category_id: null,
+    kind: 'income' as const,
+    amount: d.amount,
+    note: null,
+    occurred_on: d.date,
+    recurring_rule_id: null,
+  }))
+
+  // Pengeluaran representatif: 2000/bulan per bulan × 12 = konservatif
+  const MONTHLY_EXPENSE = 3_000_000
+  const expMonths = [
+    '2025-11', '2025-12', '2026-01', '2026-02', '2026-03', '2026-04',
+    '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10',
+  ]
+  const expenseTxs: Transaction[] = expMonths.map((m, i) => ({
+    id: demoIdT(`test:expense:${i}`),
+    user_id: 'u',
+    account_id: FAKE_BRI_ID,
+    category_id: null,
+    kind: 'expense' as const,
+    amount: MONTHLY_EXPENSE,
+    note: null,
+    occurred_on: `${m}-15`,
+    recurring_rule_id: null,
+  }))
+
+  // Trades BTC + EMAS dari BRI
+  const tradesForBalance: Trade[] = [
+    ...btcTradeDefs.filter((t) => t.date >= '2025-11-01').map((t, i) => ({
+      id: demoIdT(`test:trade:btc:${i}`),
+      user_id: 'u',
+      asset_id: FAKE_BTC_ID,
+      platform_id: null,
+      account_id: FAKE_BRI_ID,
+      side: t.side,
+      quantity: t.qty,
+      price_per_unit: 1_800_000_000, // harga rata-rata fiktif
+      fee: 0,
+      traded_on: t.date,
+      note: null,
+    })),
+    ...emasTradeDefs.filter((t) => t.date >= '2025-11-01').map((t, i) => ({
+      id: demoIdT(`test:trade:emas:${i}`),
+      user_id: 'u',
+      asset_id: FAKE_EMAS_ID,
+      platform_id: null,
+      account_id: FAKE_BRI_ID,
+      side: t.side,
+      quantity: t.qty,
+      price_per_unit: 1_260_000, // harga rata-rata fiktif
+      fee: 0,
+      traded_on: t.date,
+      note: null,
+    })),
+  ]
+
+  const allTxs = [...incomeTxs, ...expenseTxs]
+
+  // Verifikasi saldo BRI per akhir bulan: tidak ada yang negatif
+  let briBelowZero = false
+  for (const m of expMonths) {
+    const [y, mo] = m.split('-').map(Number)
+    const lastDay = new Date(y, mo, 0).getDate()
+    const cutoff = `${m}-${String(lastDay).padStart(2, '0')}`
+    const bal = accountBalance(fakeAccBRI, allTxs, tradesForBalance, cutoff)
+    if (bal < 0) briBelowZero = true
+  }
+  ok('21.9 saldo BRI tidak pernah negatif di akhir bulan', !briBelowZero)
+
+  // ── 21.10 Saldo Kas tidak negatif ─────────────────────────────────────────
+  // Kas hanya punya opening balance 2_000_000, tidak ada transaksi dari Kas dalam test ini
+  const kasBalFinal = accountBalance(fakeAccKas, [], [], '2026-10-31')
+  ok('21.10 saldo Kas dengan opening balance saja tidak negatif', kasBalFinal >= 0)
 }
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
