@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { LazyMotion, domAnimation, m, useReducedMotion } from 'motion/react'
-import { Eye, EyeOff, Moon, Sun, SunMoon } from 'lucide-react'
+import { Eye, EyeOff, LayoutDashboard, Moon, Sun, SunMoon, TrendingUp } from 'lucide-react'
 import LoginScene from './LoginScene'
 import { supabase } from '../lib/supabase'
 import { useTheme, type Palette } from '../lib/theme'
@@ -97,6 +97,7 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ type: 'error' | 'info'; text: string } | null>(null)
+  const [signupAccountMode, setSignupAccountMode] = useState<'lengkap' | 'investasi'>('lengkap')
 
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   const reduced = useReducedMotion()
@@ -164,7 +165,11 @@ export default function Login() {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) setMsg({ type: 'error', text: humanizeError(error.message) })
       } else {
-        const { data, error } = await supabase.auth.signUp({ email, password })
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { mode: signupAccountMode } },
+        })
         if (error) setMsg({ type: 'error', text: humanizeError(error.message) })
         else if (!data.session)
           setMsg({ type: 'info', text: 'Akun dibuat. Cek email untuk tautan konfirmasi, lalu masuk.' })
@@ -395,6 +400,59 @@ export default function Login() {
                   </button>
                 </div>
               </div>
+
+              {/* Jenis akun — hanya di tab Daftar */}
+              {mode === 'signup' && (
+                <div>
+                  <div className="label" style={{ display: 'block', marginBottom: 8 }}>Jenis akun</div>
+                  <div
+                    role="radiogroup"
+                    aria-label="Pilih jenis akun"
+                    style={{ display: 'flex', gap: 8 }}
+                  >
+                    {([
+                      { value: 'lengkap' as const, label: 'Lengkap', desc: 'Semua fitur', Icon: LayoutDashboard },
+                      { value: 'investasi' as const, label: 'Investasi', desc: 'Fokus investasi', Icon: TrendingUp },
+                    ] as const).map(({ value, label, desc, Icon }) => {
+                      const active = signupAccountMode === value
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setSignupAccountMode(value)}
+                          style={{
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '10px 12px',
+                            borderRadius: 'var(--radius-md)',
+                            border: `2px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+                            background: active
+                              ? 'color-mix(in srgb, var(--primary) 8%, var(--surface))'
+                              : 'var(--surface)',
+                            cursor: 'pointer',
+                            minHeight: 44,
+                            textAlign: 'left' as const,
+                            transition: 'border-color 150ms ease-out, background 150ms ease-out',
+                            fontFamily: 'inherit',
+                          }}
+                        >
+                          <Icon size={16} style={{ flexShrink: 0, color: active ? 'var(--primary)' : 'var(--text-3)' }} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: active ? 600 : 500, color: 'var(--text-1)' }}>
+                              {label}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{desc}</div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Area pesan inline — hanya muncul saat ada pesan */}
               {msg && (
