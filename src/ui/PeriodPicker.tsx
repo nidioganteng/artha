@@ -59,9 +59,9 @@ function RangePickerBody({
   const hasRange = !!(rangeMin && rangeMax)
 
   const presets: Array<{ label: string; from: string; to: string }> = [
+    { label: '1 bulan lalu', from: addMonths(today, -1), to: addMonths(today, -1) },
     { label: '3 bulan terakhir', from: addMonths(today, -2), to: today },
     { label: '6 bulan terakhir', from: addMonths(today, -5), to: today },
-    { label: 'Tahun ini', from: `${todayYear}-01`, to: today },
     { label: '12 bulan terakhir', from: addMonths(today, -11), to: today },
   ]
 
@@ -320,8 +320,10 @@ export function PeriodPicker({ period, onChange, monthsWithData, summaryLabel, '
     }
   }, [handleKindChange])
 
-  const kinds: PeriodKind[] = ['all', 'month', 'custom']
+  const kinds: PeriodKind[] = ['month', 'custom']
   const kindLabels: Record<PeriodKind, string> = { all: 'Semua', month: 'Bulan ini', custom: 'Kustom' }
+  // 'all' dihapus dari UI; kalau masih ada di localStorage, perlakukan sebagai 'month'
+  const effectiveKind: PeriodKind = period.kind === 'all' ? 'month' : period.kind
 
   const canApply = !!(tempFrom && tempTo)
 
@@ -361,7 +363,7 @@ export function PeriodPicker({ period, onChange, monthsWithData, summaryLabel, '
         }}
       >
         {kinds.map((k) => {
-          const isActive = period.kind === k
+          const isActive = effectiveKind === k
           return (
             <button
               key={k}
@@ -369,7 +371,7 @@ export function PeriodPicker({ period, onChange, monthsWithData, summaryLabel, '
               role="radio"
               aria-checked={isActive}
               onClick={() => handleKindChange(k)}
-              onKeyDown={(e) => handleKeyDown(e, kinds, period.kind)}
+              onKeyDown={(e) => handleKeyDown(e, kinds, effectiveKind)}
               tabIndex={isActive ? 0 : -1}
               style={{
                 flex: 1,
