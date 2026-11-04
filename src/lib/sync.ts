@@ -19,6 +19,7 @@ export const NUMERIC: Record<TableName, string[]> = {
   price_snapshots: ['price'],
   profiles: [],
   contributors: ['sort_order'],
+  budgets: ['amount'],
 }
 
 export const isNetworkError = (msg: string) =>
@@ -33,8 +34,9 @@ export type FailedOp = Op & { error: string; blocked: boolean; blockedBy?: strin
 // Kolom FK per tabel yang bisa menunjuk ke op lain yang mungkin gagal
 const FK_FIELDS: Partial<Record<TableName, string[]>> = {
   trades: ['asset_id', 'platform_id', 'account_id', 'contributor_id'],
-  transactions: ['account_id', 'category_id', 'recurring_rule_id', 'trade_id'],
+  transactions: ['account_id', 'category_id', 'recurring_rule_id', 'trade_id', 'transfer_pair_id'],
   recurring_checks: ['rule_id', 'transaction_id'],
+  budgets: ['category_id'],
 }
 
 /** Apakah upsert op bergantung pada salah satu ID yang gagal? */
@@ -74,6 +76,7 @@ export function emptyDB(): DB {
     price_snapshots: [],
     profiles: [],
     contributors: [],
+    budgets: [],
   }
 }
 

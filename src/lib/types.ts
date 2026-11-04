@@ -26,6 +26,7 @@ export interface Transaction {
   occurred_on: string
   recurring_rule_id: string | null
   trade_id: string | null
+  transfer_pair_id: string | null
 }
 
 export interface Platform {
@@ -109,6 +110,13 @@ export interface PriceSnapshot {
   created_at: string
 }
 
+export interface Budget {
+  id: string
+  user_id: string
+  category_id: string
+  amount: number
+}
+
 export interface DB {
   accounts: Account[]
   categories: Category[]
@@ -121,6 +129,7 @@ export interface DB {
   price_snapshots: PriceSnapshot[]
   profiles: Profile[]
   contributors: Contributor[]
+  budgets: Budget[]
 }
 
 export type TableName = keyof DB

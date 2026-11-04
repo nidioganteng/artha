@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, ArrowRightLeft } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { dateLabel, idr, todayISO } from '../lib/format'
 import { periodRange } from '../lib/calc'
@@ -7,6 +7,8 @@ import { loadPeriod, savePeriod, periodSummaryLabel, type DashPeriod } from '../
 import { Sheet, EmptyState, Field, MoneyInput, ConfirmDialog } from '../ui'
 import { PeriodPicker } from '../ui/PeriodPicker'
 import type { Kind, Transaction } from '../lib/types'
+
+type FormKind = Kind | 'transfer'
 
 const TX_PERIOD_KEY = 'artha:txPeriod'
 type Filter = Kind | 'all'
@@ -62,12 +64,16 @@ export default function Transactions() {
   const [open, setOpen] = useState(false)
   const [editTx, setEditTx] = useState<Transaction | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
-  const [kind, setKind] = useState<Kind>('expense')
+  const [formKind, setFormKind] = useState<FormKind>('expense')
+  const kind: Kind = formKind === 'transfer' ? 'expense' : formKind
   const [amountVal, setAmountVal] = useState<number | null>(null)
   const [categoryId, setCategoryId] = useState('')
   const [accountId, setAccountId] = useState(() => db.accounts[0]?.id ?? '')
+  const [toAccountId, setToAccountId] = useState(() => db.accounts[1]?.id ?? db.accounts[0]?.id ?? '')
   const effectiveAccountId =
     db.accounts.find((a) => a.id === accountId)?.id ?? db.accounts[0]?.id ?? ''
+  const effectiveToAccountId =
+    db.accounts.find((a) => a.id === toAccountId)?.id ?? db.accounts[0]?.id ?? ''
   const [date, setDate] = useState(todayISO)
   const [note, setNote] = useState('')
   const [formError, setFormError] = useState('')
@@ -87,35 +93,36 @@ export default function Transactions() {
 
   const totals = useMemo(
     () => ({
-      income: list.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0),
-      expense: list.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0),
+      income: list.filter((t) => t.kind === 'income' && !t.transfer_pair_id).reduce((s, t) => s + t.amount, 0),
+      expense: list.filter((t) => t.kind === 'expense' && !t.transfer_pair_id).reduce((s, t) => s + t.amount, 0),
     }),
     [list],
   )
 
   const periodTotals = useMemo(
     () => ({
-      income: periodTx.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0),
-      expense: periodTx.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0),
+      income: periodTx.filter((t) => t.kind === 'income' && !t.transfer_pair_id).reduce((s, t) => s + t.amount, 0),
+      expense: periodTx.filter((t) => t.kind === 'expense' && !t.transfer_pair_id).reduce((s, t) => s + t.amount, 0),
     }),
     [periodTx],
   )
 
   function openAdd() {
     setEditTx(null)
-    setKind('expense')
+    setFormKind('expense')
     setDate(todayISO())
     setAmountVal(null)
     setNote('')
     setCategoryId(mostUsedCategoryId(db.transactions, db.categories, 'expense'))
     setAccountId(db.accounts[0]?.id ?? '')
+    setToAccountId(db.accounts[1]?.id ?? db.accounts[0]?.id ?? '')
     setFormError('')
     setOpen(true)
   }
 
   function openEdit(tx: Transaction) {
     setEditTx(tx)
-    setKind(tx.kind)
+    setFormKind(tx.transfer_pair_id ? 'transfer' : tx.kind)
     setAmountVal(tx.amount)
     setCategoryId(tx.category_id ?? '')
     setAccountId(tx.account_id ?? db.accounts[0]?.id ?? '')
@@ -131,8 +138,48 @@ export default function Transactions() {
       setFormError('Nominal harus lebih dari 0.')
       return
     }
+    if (formKind === 'transfer' && effectiveAccountId === effectiveToAccountId) {
+      setFormError('Rekening asal dan tujuan tidak boleh sama.')
+      return
+    }
     setFormError('')
-    if (editTx) {
+
+    if (formKind === 'transfer') {
+      if (editTx) {
+        // Edit sisi keluar dari transfer
+        const pairId = editTx.transfer_pair_id ?? editTx.id
+        save('transactions', { ...editTx, amount: amountVal, account_id: effectiveAccountId || null, occurred_on: date, note: note.trim() || null })
+        // Perbarui sisi masuk jika ada
+        const pairTx = db.transactions.find((t) => t.id !== editTx.id && t.transfer_pair_id === pairId)
+        if (pairTx) {
+          save('transactions', { ...pairTx, amount: amountVal, account_id: effectiveToAccountId || null, occurred_on: date, note: note.trim() || null })
+        }
+      } else {
+        const pairId = crypto.randomUUID()
+        save('transactions', {
+          kind: 'expense',
+          amount: amountVal,
+          category_id: null,
+          account_id: effectiveAccountId || null,
+          occurred_on: date,
+          note: note.trim() || `Transfer ke ${db.accounts.find((a) => a.id === effectiveToAccountId)?.name ?? ''}`,
+          recurring_rule_id: null,
+          trade_id: null,
+          transfer_pair_id: pairId,
+        })
+        save('transactions', {
+          kind: 'income',
+          amount: amountVal,
+          category_id: null,
+          account_id: effectiveToAccountId || null,
+          occurred_on: date,
+          note: note.trim() || `Transfer dari ${db.accounts.find((a) => a.id === effectiveAccountId)?.name ?? ''}`,
+          recurring_rule_id: null,
+          trade_id: null,
+          transfer_pair_id: pairId,
+        })
+      }
+    } else if (editTx) {
       save('transactions', {
         ...editTx,
         kind,
@@ -152,6 +199,7 @@ export default function Transactions() {
         note: note.trim() || null,
         recurring_rule_id: null,
         trade_id: null,
+        transfer_pair_id: null,
       })
     }
     setEditTx(null)
@@ -307,6 +355,9 @@ export default function Transactions() {
                   const unsaved = failedIds.has(tx.id)
                   const isIncome = tx.kind === 'income'
                   const isLinkedTrade = tx.trade_id != null
+                  const isTransfer = tx.transfer_pair_id != null
+                  // Sembunyikan sisi masuk transfer (sudah tampil dari sisi keluar)
+                  if (isTransfer && isIncome) return null
 
                   return (
                     <tr key={tx.id} style={{ opacity: unsaved ? 0.6 : 1 }}>
@@ -335,8 +386,16 @@ export default function Transactions() {
                               fontSize: 13,
                             }}
                           >
-                            {tx.note || (isIncome ? 'Pemasukan' : 'Pengeluaran')}
+                            {tx.note || (isTransfer ? 'Transfer' : isIncome ? 'Pemasukan' : 'Pengeluaran')}
                           </span>
+                          {isTransfer && (
+                            <span
+                              className="chip"
+                              style={{ fontSize: 11, padding: '1px 6px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3 }}
+                            >
+                              <ArrowRightLeft size={10} />Transfer
+                            </span>
+                          )}
                           {isLinkedTrade && (
                             <span
                               className="chip"
@@ -514,29 +573,36 @@ export default function Transactions() {
         }
       >
         <form id="form-tx" onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {(['expense', 'income'] as Kind[]).map((k) => {
-              const active = kind === k
-              const activeColor = k === 'expense' ? 'var(--expense)' : 'var(--income)'
-              const activeFg = k === 'expense' ? 'var(--expense-fg)' : 'var(--income-fg)'
+          {/* Jenis: Pengeluaran / Pemasukan / Transfer */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            {([
+              { k: 'expense' as FormKind, label: 'Keluar', color: 'var(--expense)', fg: 'var(--expense-fg)' },
+              { k: 'income' as FormKind, label: 'Masuk', color: 'var(--income)', fg: 'var(--income-fg)' },
+              { k: 'transfer' as FormKind, label: 'Transfer', color: 'var(--invest)', fg: 'var(--invest-fg)' },
+            ]).map(({ k, label, color, fg }) => {
+              const active = formKind === k
               return (
                 <button
                   key={k}
                   type="button"
-                  onClick={() => { setKind(k); setCategoryId(mostUsedCategoryId(db.transactions, db.categories, k)) }}
+                  disabled={!!editTx && k === 'transfer' && !editTx.transfer_pair_id}
+                  onClick={() => {
+                    setFormKind(k)
+                    if (k !== 'transfer') setCategoryId(mostUsedCategoryId(db.transactions, db.categories, k as Kind))
+                  }}
                   style={{
-                    padding: '10px 16px',
+                    padding: '10px 8px',
                     borderRadius: 'var(--radius-md)',
-                    border: `2px solid ${active ? activeColor : 'var(--border)'}`,
-                    background: active ? activeColor : 'transparent',
-                    color: active ? activeFg : 'var(--text-2)',
+                    border: `2px solid ${active ? color : 'var(--border)'}`,
+                    background: active ? color : 'transparent',
+                    color: active ? fg : 'var(--text-2)',
                     fontWeight: 600,
-                    fontSize: 14,
+                    fontSize: 13,
                     cursor: 'pointer',
                     transition: 'all 150ms ease-out',
                   }}
                 >
-                  {k === 'expense' ? 'Pengeluaran' : 'Pemasukan'}
+                  {label}
                 </button>
               )
             })}
@@ -546,34 +612,36 @@ export default function Transactions() {
             <MoneyInput id="tx-amt" value={amountVal} onValueChange={setAmountVal} autoFocus />
           </Field>
 
-          <Field label="Kategori" htmlFor="tx-cat">
-            <select
-              id="tx-cat"
-              className="input"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-            >
-              <option value="">Tanpa kategori</option>
-              {cats.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </Field>
-
-          {db.accounts.length > 0 && (
-            <Field label="Rekening" htmlFor="tx-acc">
-              <select
-                id="tx-acc"
-                className="input"
-                value={effectiveAccountId}
-                onChange={(e) => setAccountId(e.target.value)}
-              >
-                <option value="">Tidak dipilih</option>
-                {db.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-            </Field>
+          {formKind === 'transfer' ? (
+            <>
+              <Field label="Dari rekening" htmlFor="tx-from">
+                <select id="tx-from" className="input" value={effectiveAccountId} onChange={(e) => setAccountId(e.target.value)}>
+                  {db.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Ke rekening" htmlFor="tx-to">
+                <select id="tx-to" className="input" value={effectiveToAccountId} onChange={(e) => setToAccountId(e.target.value)}>
+                  {db.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Kategori" htmlFor="tx-cat">
+                <select id="tx-cat" className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  <option value="">Tanpa kategori</option>
+                  {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
+              {db.accounts.length > 0 && (
+                <Field label="Rekening" htmlFor="tx-acc">
+                  <select id="tx-acc" className="input" value={effectiveAccountId} onChange={(e) => setAccountId(e.target.value)}>
+                    <option value="">Tidak dipilih</option>
+                    {db.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </Field>
+              )}
+            </>
           )}
 
           <Field label="Tanggal" htmlFor="tx-dt">
@@ -601,9 +669,19 @@ export default function Transactions() {
       <ConfirmDialog
         open={deleteTarget !== null}
         title="Hapus Transaksi"
-        message="Hapus transaksi ini?"
+        message={deleteTarget?.transfer_pair_id ? 'Hapus transfer ini? Kedua sisi (keluar dan masuk) akan dihapus.' : 'Hapus transaksi ini?'}
         onConfirm={() => {
-          if (deleteTarget) remove('transactions', deleteTarget.id)
+          if (deleteTarget) {
+            if (deleteTarget.transfer_pair_id) {
+              // Hapus kedua sisi transfer
+              const pairId = deleteTarget.transfer_pair_id
+              db.transactions
+                .filter((t) => t.transfer_pair_id === pairId)
+                .forEach((t) => remove('transactions', t.id))
+            } else {
+              remove('transactions', deleteTarget.id)
+            }
+          }
           setDeleteTarget(null)
         }}
         onCancel={() => setDeleteTarget(null)}

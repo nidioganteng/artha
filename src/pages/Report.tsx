@@ -4,6 +4,7 @@ import { useStore } from '../lib/store'
 import { idr, monthKey, monthLabel, shiftMonth, todayISO } from '../lib/format'
 import { formatShort } from '../lib/amount'
 import { monthReport, unassignedTrades } from '../lib/ledger'
+import type { Budget } from '../lib/types'
 
 function StatBox({
   label,
@@ -40,14 +41,19 @@ function CategoryBar({
   total,
   max,
   kind,
+  budget,
 }: {
   name: string
   total: number
   max: number
   kind: 'income' | 'expense'
+  budget?: number
 }) {
   const pct = max > 0 ? (total / max) * 100 : 0
   const token = kind === 'income' ? 'var(--income)' : 'var(--expense)'
+  const budgetPct = budget && budget > 0 ? Math.min(100, (total / budget) * 100) : null
+  const overBudget = budget != null && total > budget
+  const barColor = overBudget ? 'var(--expense)' : token
   return (
     <div style={{ marginBottom: 10, minWidth: 0 }}>
       <div
@@ -72,36 +78,35 @@ function CategoryBar({
         >
           {name}
         </span>
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontWeight: 600,
-            color: token,
-            flexShrink: 0,
-          }}
-          aria-label={idr(total)}
-        >
-          {formatShort(total)}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexShrink: 0 }}>
+          <span
+            style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: overBudget ? 'var(--expense)' : token }}
+            aria-label={idr(total)}
+          >
+            {formatShort(total)}
+          </span>
+          {budget != null && (
+            <span className="muted" style={{ fontSize: 11 }}>/ {formatShort(budget)}</span>
+          )}
+        </div>
       </div>
-      <div
-        style={{
-          height: 6,
-          borderRadius: 3,
-          background: 'var(--surface-2)',
-          overflow: 'hidden',
-        }}
-      >
+      {/* Bar utama (relatif terhadap max atau budget) */}
+      <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
         <div
           style={{
             height: '100%',
-            width: `${Math.max(2, pct)}%`,
-            background: token,
+            width: `${Math.max(2, budgetPct ?? pct)}%`,
+            background: barColor,
             borderRadius: 3,
             transition: 'width 300ms ease-out',
           }}
         />
       </div>
+      {overBudget && (
+        <div style={{ fontSize: 11, color: 'var(--expense)', marginTop: 3 }}>
+          Melebihi batas {formatShort(total - budget)}
+        </div>
+      )}
     </div>
   )
 }
@@ -122,6 +127,12 @@ export default function Report({ goto }: { goto?: (tab: string) => void }) {
   const incomeCats = report.byCategory.filter((c) => c.kind === 'income')
   const expenseCats = report.byCategory.filter((c) => c.kind === 'expense')
   const maxCat = Math.max(...report.byCategory.map((c) => c.total), 1)
+
+  const budgetMap = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const b of db.budgets as Budget[]) m.set(b.category_id, b.amount)
+    return m
+  }, [db.budgets])
 
   return (
     <div data-testid="report-page" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -211,7 +222,14 @@ export default function Report({ goto }: { goto?: (tab: string) => void }) {
                   Pengeluaran
                 </div>
                 {expenseCats.map((c) => (
-                  <CategoryBar key={`e-${c.categoryId ?? 'none'}`} name={c.name} total={c.total} max={maxCat} kind="expense" />
+                  <CategoryBar
+                    key={`e-${c.categoryId ?? 'none'}`}
+                    name={c.name}
+                    total={c.total}
+                    max={maxCat}
+                    kind="expense"
+                    budget={c.categoryId ? budgetMap.get(c.categoryId) : undefined}
+                  />
                 ))}
               </div>
             )}

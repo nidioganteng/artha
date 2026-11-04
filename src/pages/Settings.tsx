@@ -4,11 +4,12 @@ import { useStore } from '../lib/store'
 import { useTheme } from '../lib/theme'
 import { useMode } from '../lib/useMode'
 import type { FailedOp } from '../lib/store'
-import type { Account, Asset, Contributor, Kind, TableName } from '../lib/types'
+import type { Account, Asset, Budget, Contributor, Kind, TableName } from '../lib/types'
 import type { Palette } from '../lib/theme'
 import { Sheet, Field, MoneyInput, ConfirmDialog } from '../ui'
 import { accountBalance } from '../lib/ledger'
 import { idr } from '../lib/format'
+import { formatShort } from '../lib/amount'
 
 const TABLE_LABEL: Record<TableName, string> = {
   accounts: 'Rekening',
@@ -22,7 +23,27 @@ const TABLE_LABEL: Record<TableName, string> = {
   price_snapshots: 'Snapshot harga',
   profiles: 'Profil akun',
   contributors: 'Kontributor',
+  budgets: 'Budget',
 }
+
+const INDODAX_PAIRS: { pair: string; label: string }[] = [
+  { pair: 'btcidr',   label: 'Bitcoin (BTC)' },
+  { pair: 'ethidr',   label: 'Ethereum (ETH)' },
+  { pair: 'bnbidr',   label: 'BNB' },
+  { pair: 'solidr',   label: 'Solana (SOL)' },
+  { pair: 'xrpidr',   label: 'Ripple (XRP)' },
+  { pair: 'dogeidr',  label: 'Dogecoin (DOGE)' },
+  { pair: 'adaidr',   label: 'Cardano (ADA)' },
+  { pair: 'matidr',   label: 'Polygon (MATIC)' },
+  { pair: 'linkidr',  label: 'Chainlink (LINK)' },
+  { pair: 'avaxidr',  label: 'Avalanche (AVAX)' },
+  { pair: 'ltcidr',   label: 'Litecoin (LTC)' },
+  { pair: 'trxidr',   label: 'Tron (TRX)' },
+  { pair: 'dotididr', label: 'Polkadot (DOT)' },
+  { pair: 'uniidxidr', label: 'Uniswap (UNI)' },
+  { pair: '__custom__', label: 'Lainnya (ketik manual)...' },
+]
+const KNOWN_PAIRS = new Set(INDODAX_PAIRS.filter((p) => p.pair !== '__custom__').map((p) => p.pair))
 
 function opLabel(f: FailedOp): string {
   if (f.blocked) return `Diblokir: ${TABLE_LABEL[f.table]}`
@@ -89,6 +110,10 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
   const [editContribName, setEditContribName] = useState('')
   const [editContribError, setEditContribError] = useState<string | null>(null)
   const [confirmDelContrib, setConfirmDelContrib] = useState<{ id: string; name: string; tradeCount: number } | null>(null)
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null)
+  const [editBudgetVal, setEditBudgetVal] = useState<number | null>(null)
+
+  const [indodaxCustom, setIndodaxCustom] = useState(false)
 
   const [asset, setAsset] = useState({
     symbol: '', name: '',
@@ -183,6 +208,25 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
       if (trade.contributor_id === confirmDelContrib.id) save('trades', { ...(trade as unknown as Record<string, unknown>), contributor_id: null })
     }
     remove('contributors', confirmDelContrib.id); setConfirmDelContrib(null)
+  }
+
+  function openEditBudget(catId: string, currentAmount: number | undefined) {
+    setEditingBudgetId(catId)
+    setEditBudgetVal(currentAmount ?? null)
+  }
+  function closeBudgetEdit() { setEditingBudgetId(null); setEditBudgetVal(null) }
+  function saveBudget(catId: string) {
+    const existing = db.budgets.find((b: Budget) => b.category_id === catId)
+    if (editBudgetVal && editBudgetVal > 0) {
+      if (existing) {
+        save('budgets', { ...existing as unknown as Record<string, unknown>, amount: editBudgetVal })
+      } else {
+        save('budgets', { category_id: catId, amount: editBudgetVal })
+      }
+    } else if (existing) {
+      remove('budgets', existing.id)
+    }
+    closeBudgetEdit()
   }
 
   const effectiveMode = mode === 'system' ? 'light' : mode
@@ -444,15 +488,47 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
         <div className="card" style={{ padding: 20 }}>
           <h2 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)', marginBottom: 8 }}>Kategori Transaksi</h2>
           {db.categories.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '8px 0' }}>Belum ada kategori.</p>}
-          {db.categories.map((c) => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                <div className="muted" style={{ fontSize: 11 }}>{c.kind === 'income' ? 'Pemasukan' : 'Pengeluaran'}</div>
+          {db.categories.map((c) => {
+            const budget = db.budgets.find((b: Budget) => b.category_id === c.id)
+            const isEditingBudget = editingBudgetId === c.id
+            return (
+              <div key={c.id} style={{ borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>{c.kind === 'income' ? 'Pemasukan' : 'Pengeluaran'}</div>
+                  </div>
+                  {c.kind === 'expense' && (
+                    <button
+                      className="chip"
+                      aria-label={budget ? `Ubah batas ${c.name}` : `Tambah batas ${c.name}`}
+                      onClick={() => isEditingBudget ? closeBudgetEdit() : openEditBudget(c.id, budget?.amount)}
+                      style={{ fontSize: 11, padding: '2px 8px', cursor: 'pointer', border: 'none', background: isEditingBudget ? 'var(--primary)' : undefined, color: isEditingBudget ? 'var(--primary-fg)' : undefined }}
+                    >
+                      {budget ? formatShort(budget.amount) : '+ Batas'}
+                    </button>
+                  )}
+                  <button className="btn-ghost" aria-label={`Hapus ${c.name}`} onClick={() => del('categories', c.id, c.name)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
+                </div>
+                {isEditingBudget && (
+                  <div style={{ display: 'flex', gap: 8, paddingBottom: 10, alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <MoneyInput
+                        value={editBudgetVal}
+                        onValueChange={setEditBudgetVal}
+                        placeholder="Batas bulanan (Rp)"
+                        autoFocus
+                      />
+                    </div>
+                    <button className="btn" style={{ flexShrink: 0, padding: '8px 14px' }} onClick={() => saveBudget(c.id)}>Simpan</button>
+                    {budget && (
+                      <button className="btn-ghost" style={{ flexShrink: 0, padding: '8px 10px', color: 'var(--expense)' }} onClick={() => { setEditBudgetVal(null); saveBudget(c.id) }} aria-label="Hapus batas">✕</button>
+                    )}
+                  </div>
+                )}
               </div>
-              <button className="btn-ghost" aria-label={`Hapus ${c.name}`} onClick={() => del('categories', c.id, c.name)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
-            </div>
-          ))}
+            )
+          })}
           <form onSubmit={addCat} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <input className="input" placeholder="Nama kategori" value={catName} onChange={(e) => setCatName(e.target.value)} />
             <select className="input" style={{ maxWidth: 110 }} value={catKind} onChange={(e) => setCatKind(e.target.value as Kind)}>
@@ -503,12 +579,34 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
               <option value="other">Lainnya</option>
             </select>
             <input className="input" placeholder="Satuan (gram, BTC)" value={asset.unit} onChange={(e) => setAsset({ ...asset, unit: e.target.value })} />
-            <select className="input" value={asset.price_source} onChange={(e) => setAsset({ ...asset, price_source: e.target.value as Asset['price_source'] })}>
+            <select className="input" value={asset.price_source} onChange={(e) => { setAsset({ ...asset, price_source: e.target.value as Asset['price_source'], price_ref: '' }); setIndodaxCustom(false) }}>
               <option value="manual">Harga manual</option>
               <option value="indodax">Live Indodax</option>
             </select>
             {asset.price_source === 'indodax' ? (
-              <input className="input" placeholder="Pair (btcidr)" value={asset.price_ref} onChange={(e) => setAsset({ ...asset, price_ref: e.target.value })} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <select
+                  className="input"
+                  value={indodaxCustom ? '__custom__' : (asset.price_ref || '')}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') {
+                      setIndodaxCustom(true)
+                      setAsset({ ...asset, price_ref: '' })
+                    } else {
+                      setIndodaxCustom(false)
+                      setAsset({ ...asset, price_ref: e.target.value })
+                    }
+                  }}
+                >
+                  <option value="">Pilih aset Indodax...</option>
+                  {INDODAX_PAIRS.map((p) => (
+                    <option key={p.pair} value={p.pair}>{p.label}</option>
+                  ))}
+                </select>
+                {indodaxCustom && (
+                  <input className="input" placeholder="Pair Indodax (mis: btcidr)" value={asset.price_ref} onChange={(e) => setAsset({ ...asset, price_ref: e.target.value.trim().toLowerCase() })} />
+                )}
+              </div>
             ) : <div />}
             <button className="btn" style={{ gridColumn: '1 / -1' }}>Tambah Aset</button>
           </form>
