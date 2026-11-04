@@ -340,7 +340,7 @@ export default function Transactions() {
                           {isLinkedTrade && (
                             <span
                               className="chip"
-                              style={{ fontSize: 10, padding: '1px 6px', flexShrink: 0 }}
+                              style={{ fontSize: 11, padding: '1px 6px', flexShrink: 0 }}
                             >
                               Investasi
                             </span>

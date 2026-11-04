@@ -597,7 +597,7 @@ export default function Investments() {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
                     gap: '12px 16px',
                   }}
                 >

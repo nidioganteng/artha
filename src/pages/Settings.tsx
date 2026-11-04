@@ -240,7 +240,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                     }}
                   >
                     <Icon size={18} />
-                    <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'inherit' }}>{label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, fontFamily: 'inherit' }}>{label}</span>
                   </button>
                 )
               })}

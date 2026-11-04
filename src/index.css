@@ -261,6 +261,8 @@
 
 html, body, #root { min-height: 100%; }
 
+button, a, [role="button"] { touch-action: manipulation; }
+
 body {
   font-family: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, sans-serif;
   background-color: var(--bg);
