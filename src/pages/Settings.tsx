@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Sun, Moon, Pencil, LayoutDashboard, TrendingUp } from 'lucide-react'
+import { Sun, Moon, Pencil, LayoutDashboard, TrendingUp, Lock, Unlock } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { useTheme } from '../lib/theme'
 import { useMode } from '../lib/useMode'
@@ -51,78 +51,6 @@ function downloadCSV(name: string, rows: (string | number | null)[][]) {
   URL.revokeObjectURL(a.href)
 }
 
-// Row item di dalam kartu pengaturan
-function SettingRow({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 16,
-        padding: '14px 0',
-        borderBottom: '1px solid var(--border)',
-      }}
-    >
-      <div>
-        <div style={{ fontSize: 14, color: 'var(--text-1)', fontWeight: 500 }}>{label}</div>
-        {sub && <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{sub}</div>}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-// Baris data (nama + sub + tombol hapus/edit)
-function ListRow({ label, sub, onEdit, onDelete }: { label: string; sub?: string; onEdit?: () => void; onDelete: () => void }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '10px 0',
-        borderBottom: '1px solid var(--border)',
-      }}
-    >
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 14, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {label}
-        </div>
-        {sub && <div className="muted" style={{ fontSize: 12 }}>{sub}</div>}
-      </div>
-      {onEdit && (
-        <button
-          className="btn-ghost"
-          aria-label={`Ubah ${label}`}
-          onClick={onEdit}
-          style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', flexShrink: 0 }}
-        >
-          <Pencil size={15} />
-        </button>
-      )}
-      <button
-        className="btn-ghost"
-        aria-label={`Hapus ${label}`}
-        onClick={onDelete}
-        style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', flexShrink: 0 }}
-      >
-        ✕
-      </button>
-    </div>
-  )
-}
-
-// Kartu seksi
-function CardSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="card" style={{ padding: '20px 20px 16px' }}>
-      <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 4 }}>{title}</h2>
-      {children}
-    </div>
-  )
-}
-
 export default function Settings({ onLogout, focusFailed }: { onLogout: () => void; focusFailed?: boolean }) {
   const { db, save, remove, refresh, pending, failed, failedOps, retryFailed, discardFailed } = useStore()
   const { mode, setMode, palette, setPalette } = useTheme()
@@ -163,8 +91,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
   const [confirmDelContrib, setConfirmDelContrib] = useState<{ id: string; name: string; tradeCount: number } | null>(null)
 
   const [asset, setAsset] = useState({
-    symbol: '',
-    name: '',
+    symbol: '', name: '',
     asset_type: 'crypto' as Asset['asset_type'],
     unit: '',
     price_source: 'manual' as Asset['price_source'],
@@ -173,22 +100,16 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
 
   const currentBalances = useMemo(() => {
     const map = new Map<string, number>()
-    for (const a of db.accounts) {
-      map.set(a.id, accountBalance(a, db.transactions, db.trades))
-    }
+    for (const a of db.accounts) map.set(a.id, accountBalance(a, db.transactions, db.trades))
     return map
   }, [db.accounts, db.transactions, db.trades])
 
   function openEditAcc(a: Account) {
-    setEditingAcc(a)
-    setEditAccName(a.name)
+    setEditingAcc(a); setEditAccName(a.name)
     setEditAccType((a.type ?? 'bank') as 'cash' | 'bank' | 'ewallet')
-    setEditAccOpening(a.opening_balance ?? 0)
-    setEditAccError(null)
+    setEditAccOpening(a.opening_balance ?? 0); setEditAccError(null)
   }
-
   function closeEditAcc() { setEditingAcc(null); setEditAccError(null) }
-
   function submitEditAcc(e: FormEvent) {
     e.preventDefault()
     if (!editingAcc) return
@@ -196,7 +117,6 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
     save('accounts', { ...editingAcc, name: editAccName.trim(), type: editAccType, opening_balance: editAccOpening ?? 0 })
     closeEditAcc()
   }
-
   function tryDeleteAcc(a: Account) {
     const txCount = db.transactions.filter((t) => t.account_id === a.id).length
     const trCount = db.trades.filter((t) => t.account_id === a.id).length
@@ -211,47 +131,23 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
     }
     setConfirmAcc({ id: a.id, name: a.name })
   }
+  function confirmDeleteAcc() { if (!confirmAcc) return; remove('accounts', confirmAcc.id); setConfirmAcc(null) }
 
-  function confirmDeleteAcc() {
-    if (!confirmAcc) return
-    remove('accounts', confirmAcc.id)
-    setConfirmAcc(null)
-  }
-
-  function addCat(e: FormEvent) {
-    e.preventDefault()
-    if (!catName.trim()) return
-    save('categories', { name: catName.trim(), kind: catKind })
-    setCatName('')
-  }
-  function addAcc(e: FormEvent) {
-    e.preventDefault()
-    if (!accName.trim()) return
-    save('accounts', { name: accName.trim(), type: accType, opening_balance: 0 })
-    setAccName('')
-  }
-  function addPlat(e: FormEvent) {
-    e.preventDefault()
-    if (!platName.trim()) return
-    save('platforms', { name: platName.trim() })
-    setPlatName('')
-  }
+  function addCat(e: FormEvent) { e.preventDefault(); if (!catName.trim()) return; save('categories', { name: catName.trim(), kind: catKind }); setCatName('') }
+  function addAcc(e: FormEvent) { e.preventDefault(); if (!accName.trim()) return; save('accounts', { name: accName.trim(), type: accType, opening_balance: 0 }); setAccName('') }
+  function addPlat(e: FormEvent) { e.preventDefault(); if (!platName.trim()) return; save('platforms', { name: platName.trim() }); setPlatName('') }
   function addAsset(e: FormEvent) {
     e.preventDefault()
     if (!asset.symbol.trim() || !asset.name.trim()) return
     save('assets', {
-      symbol: asset.symbol.trim().toUpperCase(),
-      name: asset.name.trim(),
-      asset_type: asset.asset_type,
-      unit: asset.unit.trim() || 'unit',
+      symbol: asset.symbol.trim().toUpperCase(), name: asset.name.trim(),
+      asset_type: asset.asset_type, unit: asset.unit.trim() || 'unit',
       price_source: asset.price_source,
       price_ref: asset.price_source === 'indodax' ? asset.price_ref.trim().toLowerCase() || null : null,
-      manual_price: null,
-      manual_price_at: null,
+      manual_price: null, manual_price_at: null,
     })
     setAsset({ ...asset, symbol: '', name: '', unit: '', price_ref: '' })
   }
-
   function del(table: 'categories' | 'platforms' | 'assets', id: string, label: string) {
     if (table === 'assets' && db.trades.some((t) => t.asset_id === id)) {
       setBlockedAsset({ name: label, message: 'Aset ini masih punya catatan pembelian/penjualan. Hapus catatannya dulu di tab Investasi.' })
@@ -259,173 +155,149 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
     }
     setConfirmDel({ table, id, label })
   }
-
   function addContrib(e: FormEvent) {
     e.preventDefault()
     const trimmed = contribName.trim()
     if (!trimmed) return
-    if (db.contributors.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
-      setContribNameError('Nama sudah dipakai.')
-      return
-    }
+    if (db.contributors.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) { setContribNameError('Nama sudah dipakai.'); return }
     save('contributors', { name: trimmed, sort_order: db.contributors.length })
-    setContribName('')
-    setContribNameError(null)
+    setContribName(''); setContribNameError(null)
   }
-
-  function openEditContrib(c: Contributor) {
-    setEditingContrib(c)
-    setEditContribName(c.name)
-    setEditContribError(null)
-  }
-
+  function openEditContrib(c: Contributor) { setEditingContrib(c); setEditContribName(c.name); setEditContribError(null) }
   function closeEditContrib() { setEditingContrib(null); setEditContribError(null) }
-
   function submitEditContrib(e: FormEvent) {
     e.preventDefault()
     if (!editingContrib) return
     const trimmed = editContribName.trim()
     if (!trimmed) { setEditContribError('Nama wajib diisi.'); return }
-    if (db.contributors.some((c) => c.id !== editingContrib.id && c.name.toLowerCase() === trimmed.toLowerCase())) {
-      setEditContribError('Nama sudah dipakai kontributor lain.')
-      return
-    }
+    if (db.contributors.some((c) => c.id !== editingContrib.id && c.name.toLowerCase() === trimmed.toLowerCase())) { setEditContribError('Nama sudah dipakai kontributor lain.'); return }
     save('contributors', { ...editingContrib, name: trimmed })
     closeEditContrib()
   }
-
   function tryDeleteContrib(c: Contributor) {
-    const trCount = db.trades.filter((t) => t.contributor_id === c.id).length
-    setConfirmDelContrib({ id: c.id, name: c.name, tradeCount: trCount })
+    setConfirmDelContrib({ id: c.id, name: c.name, tradeCount: db.trades.filter((t) => t.contributor_id === c.id).length })
   }
-
   function confirmDeleteContrib() {
     if (!confirmDelContrib) return
     for (const trade of db.trades) {
-      if (trade.contributor_id === confirmDelContrib.id) {
-        save('trades', { ...(trade as unknown as Record<string, unknown>), contributor_id: null })
-      }
+      if (trade.contributor_id === confirmDelContrib.id) save('trades', { ...(trade as unknown as Record<string, unknown>), contributor_id: null })
     }
-    remove('contributors', confirmDelContrib.id)
-    setConfirmDelContrib(null)
+    remove('contributors', confirmDelContrib.id); setConfirmDelContrib(null)
   }
 
   const effectiveMode = mode === 'system' ? 'light' : mode
 
-  const paletteOptions: { value: Palette; label: string }[] = [
-    { value: 'a', label: 'Lime' },
-    { value: 'b', label: 'Sage' },
+  const paletteOptions: { value: Palette; label: string; desc: string }[] = [
+    { value: 'a', label: 'Lime & Hutan', desc: 'Hijau modern' },
+    { value: 'b', label: 'Sage & Greige', desc: 'Hangat natural' },
   ]
 
+  // ── Shared style helpers ────────────────────────────
+  const divider = { borderTop: '1px solid var(--border)', paddingTop: 16, marginTop: 16 } as const
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <h1 style={{ fontWeight: 700, fontSize: 22, color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
         Pengaturan
       </h1>
 
-      {/* ── Tampilan ─────────────────────────────────── */}
-      <div className="card" style={{ padding: '0 20px' }}>
-        <SettingRow label="Tema">
-          <div
-            role="radiogroup"
-            aria-label="Mode tampilan"
-            style={{
-              display: 'flex',
-              background: 'var(--surface-2)',
-              borderRadius: 'var(--radius-sm)',
-              padding: 2,
-              gap: 2,
-            }}
-          >
-            {([
-              { value: 'light' as const, label: 'Terang', Icon: Sun },
-              { value: 'dark' as const, label: 'Gelap', Icon: Moon },
-            ]).map(({ value, label, Icon }) => {
-              const active = effectiveMode === value
-              return (
-                <button
-                  key={value}
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setMode(value)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '7px 14px',
-                    borderRadius: 'calc(var(--radius-sm) - 1px)',
-                    border: 'none',
-                    background: active ? 'var(--surface)' : 'transparent',
-                    color: active ? 'var(--text-1)' : 'var(--text-3)',
-                    fontFamily: 'inherit',
-                    fontSize: 13,
-                    fontWeight: active ? 600 : 400,
-                    cursor: 'pointer',
-                    boxShadow: active ? 'var(--shadow-sm)' : 'none',
-                    transition: 'all 150ms ease-out',
-                    minHeight: 36,
-                  }}
-                >
-                  <Icon size={13} />
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        </SettingRow>
+      {/* ── Baris atas: Tampilan + Mode Akun ──────────── */}
+      <div className="grid md:grid-cols-2" style={{ gap: 16 }}>
 
-        <SettingRow label="Palet Warna">
-          <div style={{ display: 'flex', gap: 8 }}>
-            {paletteOptions.map(({ value, label }) => {
-              const active = palette === value
-              return (
-                <button
-                  key={value}
-                  onClick={() => setPalette(value)}
-                  aria-pressed={active}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
-                    padding: '7px 12px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: `2px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
-                    background: active ? 'color-mix(in srgb, var(--primary) 8%, var(--surface))' : 'var(--surface)',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                    fontFamily: 'inherit',
-                    fontSize: 13,
-                    fontWeight: active ? 600 : 400,
-                    color: 'var(--text-1)',
-                    transition: 'border-color 150ms',
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                    <div className={`swatch-${value}-primary`} style={{ width: 12, height: 12, borderRadius: 3 }} aria-hidden="true" />
-                    <div className={`swatch-${value}-accent`} style={{ width: 12, height: 12, borderRadius: 3 }} aria-hidden="true" />
-                  </div>
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        </SettingRow>
+        {/* Tampilan */}
+        <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)' }}>Tampilan</h2>
 
-        {/* Mode akun */}
-        <div style={{ padding: '16px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Mode Akun</div>
-              <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                Lengkap aktifkan semua fitur, Investasi sembunyikan transaksi dan laporan
-              </div>
+          {/* Tema: 2 ikon bulat */}
+          <div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Tema</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {([
+                { value: 'light' as const, Icon: Sun, label: 'Terang' },
+                { value: 'dark' as const, Icon: Moon, label: 'Gelap' },
+              ]).map(({ value, Icon, label }) => {
+                const active = effectiveMode === value
+                return (
+                  <button
+                    key={value}
+                    onClick={() => setMode(value)}
+                    aria-pressed={active}
+                    aria-label={label}
+                    title={label}
+                    style={{
+                      width: 52, height: 52,
+                      borderRadius: 'var(--radius-md)',
+                      border: `2px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+                      background: active ? 'var(--primary)' : 'var(--surface-2)',
+                      color: active ? 'var(--primary-fg)' : 'var(--text-2)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                      transition: 'all 150ms ease-out',
+                    }}
+                  >
+                    <Icon size={18} />
+                    <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'inherit' }}>{label}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
-          <div role="radiogroup" aria-label="Mode akun" style={{ display: 'flex', gap: 10 }}>
+
+          {/* Palet */}
+          <div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Palet Warna</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {paletteOptions.map(({ value, label, desc }) => {
+                const active = palette === value
+                return (
+                  <button
+                    key={value}
+                    onClick={() => setPalette(value)}
+                    aria-pressed={active}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '10px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      border: `2px solid ${active ? 'var(--primary)' : 'transparent'}`,
+                      background: active ? 'color-mix(in srgb, var(--primary) 10%, var(--surface-2))' : 'var(--surface-2)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 150ms',
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                      <div className={`swatch-${value}-primary`} style={{ width: 18, height: 18, borderRadius: 5 }} aria-hidden="true" />
+                      <div className={`swatch-${value}-accent`} style={{ width: 18, height: 18, borderRadius: 5 }} aria-hidden="true" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', fontFamily: 'inherit' }}>{label}</div>
+                      <div className="muted" style={{ fontSize: 11 }}>{desc}</div>
+                    </div>
+                    {active && (
+                      <span style={{ fontSize: 14, color: 'var(--primary)', flexShrink: 0 }}>✓</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Mode Akun */}
+        <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)' }}>Mode Akun</h2>
+
+          <div role="radiogroup" aria-label="Mode akun" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {([
-              { value: 'lengkap' as const, label: 'Lengkap', Icon: LayoutDashboard },
-              { value: 'investasi' as const, label: 'Investasi', Icon: TrendingUp },
-            ] as const).map(({ value, label, Icon }) => {
+              { value: 'lengkap' as const, label: 'Lengkap', desc: 'Semua fitur aktif', Icon: LayoutDashboard },
+              { value: 'investasi' as const, label: 'Investasi', desc: 'Hanya fitur investasi', Icon: TrendingUp },
+            ] as const).map(({ value, label, desc, Icon }) => {
               const active = accountMode === value
               return (
                 <button
@@ -435,95 +307,88 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                   disabled={modeLocked}
                   onClick={() => { if (!active) setPendingMode(value) }}
                   style={{
-                    flex: 1,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    padding: '10px 14px',
+                    gap: 12,
+                    padding: '12px 14px',
                     borderRadius: 'var(--radius-md)',
-                    border: `2px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
-                    background: active ? 'color-mix(in srgb, var(--primary) 8%, var(--surface))' : 'var(--surface)',
+                    border: `2px solid ${active ? 'var(--primary)' : 'transparent'}`,
+                    background: active ? 'color-mix(in srgb, var(--primary) 10%, var(--surface-2))' : 'var(--surface-2)',
                     cursor: modeLocked ? 'default' : 'pointer',
-                    fontFamily: 'inherit',
                     textAlign: 'left',
-                    transition: 'border-color 150ms',
-                    opacity: modeLocked ? 0.5 : 1,
-                    minHeight: 44,
+                    opacity: modeLocked && !active ? 0.45 : 1,
+                    transition: 'all 150ms',
                   }}
                 >
+                  {/* Radio dot */}
+                  <span
+                    style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                      border: `2px solid ${active ? 'var(--primary)' : 'var(--text-3)'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                    aria-hidden="true"
+                  >
+                    {active && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)', display: 'block' }} />}
+                  </span>
                   <Icon size={15} style={{ flexShrink: 0, color: active ? 'var(--primary)' : 'var(--text-3)' }} />
-                  <span style={{ fontSize: 13, fontWeight: active ? 600 : 400, color: 'var(--text-1)' }}>{label}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', fontFamily: 'inherit' }}>{label}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>{desc}</div>
+                  </div>
                 </button>
               )
             })}
           </div>
+
           {modeLocked && (
-            <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            <p className="muted" style={{ fontSize: 12 }}>
               Mode dikunci.{' '}
-              <button
-                className="btn-ghost"
-                onClick={() => setConfirmUnlock(true)}
-                style={{ fontSize: 12, padding: '2px 6px', minHeight: 28, display: 'inline-flex', verticalAlign: 'middle' }}
-              >
+              <button className="btn-ghost" onClick={() => setConfirmUnlock(true)} style={{ fontSize: 12, padding: '2px 6px', minHeight: 28, display: 'inline-flex', verticalAlign: 'middle' }}>
                 Buka kunci
               </button>
               {' '}untuk mengubahnya.
-            </div>
+            </p>
           )}
-        </div>
 
-        {/* Kunci mode */}
-        <SettingRow label="Kunci mode" sub="Cegah perubahan mode tidak sengaja">
-          <button
-            role="switch"
-            aria-checked={modeLocked}
-            aria-label="Kunci mode"
-            data-testid="mode-lock-toggle"
-            onClick={() => modeLocked ? setConfirmUnlock(true) : setModeLocked(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minWidth: 44,
-              minHeight: 44,
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              flexShrink: 0,
-              padding: 0,
-            }}
-          >
-            <span
+          {/* Kunci mode */}
+          <div style={divider}>
+            <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                width: 44,
-                height: 26,
-                padding: 3,
-                borderRadius: 13,
-                background: modeLocked ? 'var(--primary)' : 'var(--border)',
-                transition: 'background 150ms',
-                pointerEvents: 'none',
+                justifyContent: 'space-between',
+                gap: 12,
               }}
-              aria-hidden="true"
             >
-              <span
-                style={{
-                  display: 'block',
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  background: 'var(--surface)',
-                  transform: modeLocked ? 'translateX(18px)' : 'translateX(0)',
-                  transition: 'transform 150ms',
-                }}
-              />
-            </span>
-          </button>
-        </SettingRow>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {modeLocked ? <Lock size={13} /> : <Unlock size={13} />}
+                  Kunci mode
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>Cegah perubahan tidak sengaja</div>
+              </div>
+              <button
+                role="switch"
+                aria-checked={modeLocked}
+                aria-label="Kunci mode"
+                data-testid="mode-lock-toggle"
+                onClick={() => modeLocked ? setConfirmUnlock(true) : setModeLocked(true)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0, padding: 0 }}
+              >
+                <span
+                  style={{ display: 'flex', alignItems: 'center', width: 44, height: 26, padding: 3, borderRadius: 13, background: modeLocked ? 'var(--primary)' : 'var(--border)', transition: 'background 150ms', pointerEvents: 'none' }}
+                  aria-hidden="true"
+                >
+                  <span style={{ display: 'block', width: 20, height: 20, borderRadius: '50%', background: 'var(--surface)', transform: modeLocked ? 'translateX(18px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* ── Gagal sinkron ────────────────────────────── */}
+      {/* ── Gagal sinkron ───────────────────────────── */}
       {failedOps.length > 0 && (
         <section ref={failedRef} className="card" style={{ padding: 20, borderColor: 'var(--expense)' }}>
           <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--expense)', marginBottom: 12 }}>
@@ -533,102 +398,99 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
             <div key={f.opId} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>{opLabel(f)}</div>
-                <div className="muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {f.error}
-                </div>
+                <div className="muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.error}</div>
               </div>
-              {!f.blocked && (
-                <button className="btn" onClick={() => retryFailed(f.opId)} style={{ padding: '6px 12px', minHeight: 32, fontSize: 12, flexShrink: 0 }}>
-                  Coba lagi
-                </button>
-              )}
-              <button
-                className="btn-ghost"
-                onClick={() => discardFailed(f.opId)}
-                style={{ padding: '6px 12px', minHeight: 32, fontSize: 12, color: 'var(--expense)', flexShrink: 0 }}
-              >
-                Buang
-              </button>
+              {!f.blocked && <button className="btn" onClick={() => retryFailed(f.opId)} style={{ padding: '6px 12px', minHeight: 32, fontSize: 12, flexShrink: 0 }}>Coba lagi</button>}
+              <button className="btn-ghost" onClick={() => discardFailed(f.opId)} style={{ padding: '6px 12px', minHeight: 32, fontSize: 12, color: 'var(--expense)', flexShrink: 0 }}>Buang</button>
             </div>
           ))}
         </section>
       )}
 
-      {/* ── Grid kartu data ───────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+      {/* ── Grid kartu data ─────────────────────────── */}
+      <div className="grid md:grid-cols-2" style={{ gap: 16 }}>
 
         {/* Rekening */}
-        <CardSection title="Rekening">
-          {db.accounts.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '10px 0' }}>Belum ada rekening.</p>}
+        <div className="card" style={{ padding: 20 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)', marginBottom: 8 }}>Rekening</h2>
+          {db.accounts.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '8px 0' }}>Belum ada rekening.</p>}
           {db.accounts.map((a) => {
-            const opening = a.opening_balance ?? 0
             const current = currentBalances.get(a.id) ?? 0
             const typeLabel = a.type === 'cash' ? 'Tunai' : a.type === 'ewallet' ? 'E-wallet' : 'Bank'
             return (
-              <ListRow
-                key={a.id}
-                label={a.name}
-                sub={`${typeLabel} · Awal ${idr(opening)} · Kini ${idr(current)}`}
-                onEdit={() => openEditAcc(a)}
-                onDelete={() => tryDeleteAcc(a)}
-              />
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                  <div className="muted" style={{ fontSize: 11 }}>{typeLabel} · {idr(current)}</div>
+                </div>
+                <button className="btn-ghost" aria-label={`Ubah ${a.name}`} onClick={() => openEditAcc(a)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}><Pencil size={14} /></button>
+                <button className="btn-ghost" aria-label={`Hapus ${a.name}`} onClick={() => tryDeleteAcc(a)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
+              </div>
             )
           })}
           <form onSubmit={addAcc} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <input className="input" placeholder="Nama rekening" value={accName} onChange={(e) => setAccName(e.target.value)} />
-            <select className="input" style={{ maxWidth: 110 }} value={accType} onChange={(e) => setAccType(e.target.value as 'cash' | 'bank' | 'ewallet')}>
+            <select className="input" style={{ maxWidth: 100 }} value={accType} onChange={(e) => setAccType(e.target.value as 'cash' | 'bank' | 'ewallet')}>
               <option value="bank">Bank</option>
               <option value="cash">Tunai</option>
               <option value="ewallet">E-wallet</option>
             </select>
-            <button className="btn" style={{ flexShrink: 0 }}>Tambah</button>
+            <button className="btn" style={{ flexShrink: 0 }}>+</button>
           </form>
-          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Isi saldo awal lewat tombol edit agar laporan akurat.</p>
-        </CardSection>
+          <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>Isi saldo awal lewat tombol edit agar laporan akurat.</p>
+        </div>
 
         {/* Kategori */}
-        <CardSection title="Kategori Transaksi">
-          {db.categories.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '10px 0' }}>Belum ada kategori.</p>}
+        <div className="card" style={{ padding: 20 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)', marginBottom: 8 }}>Kategori Transaksi</h2>
+          {db.categories.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '8px 0' }}>Belum ada kategori.</p>}
           {db.categories.map((c) => (
-            <ListRow
-              key={c.id}
-              label={c.name}
-              sub={c.kind === 'income' ? 'Pemasukan' : 'Pengeluaran'}
-              onDelete={() => del('categories', c.id, c.name)}
-            />
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                <div className="muted" style={{ fontSize: 11 }}>{c.kind === 'income' ? 'Pemasukan' : 'Pengeluaran'}</div>
+              </div>
+              <button className="btn-ghost" aria-label={`Hapus ${c.name}`} onClick={() => del('categories', c.id, c.name)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
+            </div>
           ))}
           <form onSubmit={addCat} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <input className="input" placeholder="Nama kategori" value={catName} onChange={(e) => setCatName(e.target.value)} />
-            <select className="input" style={{ maxWidth: 140 }} value={catKind} onChange={(e) => setCatKind(e.target.value as Kind)}>
+            <select className="input" style={{ maxWidth: 110 }} value={catKind} onChange={(e) => setCatKind(e.target.value as Kind)}>
               <option value="expense">Pengeluaran</option>
               <option value="income">Pemasukan</option>
             </select>
-            <button className="btn" style={{ flexShrink: 0 }}>Tambah</button>
+            <button className="btn" style={{ flexShrink: 0 }}>+</button>
           </form>
-        </CardSection>
+        </div>
 
         {/* Platform */}
-        <CardSection title="Platform Investasi">
-          {db.platforms.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '10px 0' }}>Belum ada platform.</p>}
+        <div className="card" style={{ padding: 20 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)', marginBottom: 8 }}>Platform Investasi</h2>
+          {db.platforms.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '8px 0' }}>Belum ada platform.</p>}
           {db.platforms.map((p) => (
-            <ListRow key={p.id} label={p.name} onDelete={() => del('platforms', p.id, p.name)} />
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <button className="btn-ghost" aria-label={`Hapus ${p.name}`} onClick={() => del('platforms', p.id, p.name)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
+            </div>
           ))}
           <form onSubmit={addPlat} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <input className="input" placeholder="Nama platform" value={platName} onChange={(e) => setPlatName(e.target.value)} />
-            <button className="btn" style={{ flexShrink: 0 }}>Tambah</button>
+            <button className="btn" style={{ flexShrink: 0 }}>+</button>
           </form>
-        </CardSection>
+        </div>
 
         {/* Aset */}
-        <CardSection title="Aset Investasi">
-          {db.assets.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '10px 0' }}>Belum ada aset.</p>}
+        <div className="card" style={{ padding: 20 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)', marginBottom: 8 }}>Aset Investasi</h2>
+          {db.assets.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '8px 0' }}>Belum ada aset.</p>}
           {db.assets.map((a) => (
-            <ListRow
-              key={a.id}
-              label={`${a.name} (${a.symbol})`}
-              sub={a.price_source === 'indodax' ? `Live Indodax: ${a.price_ref}` : 'Harga manual'}
-              onDelete={() => del('assets', a.id, a.name)}
-            />
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{a.name} <span className="muted">({a.symbol})</span></div>
+                <div className="muted" style={{ fontSize: 11 }}>{a.price_source === 'indodax' ? `Live: ${a.price_ref}` : 'Harga manual'}</div>
+              </div>
+              <button className="btn-ghost" aria-label={`Hapus ${a.name}`} onClick={() => del('assets', a.id, a.name)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
+            </div>
           ))}
           <form onSubmit={addAsset} style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <input className="input" placeholder="Simbol (BTC)" value={asset.symbol} onChange={(e) => setAsset({ ...asset, symbol: e.target.value })} />
@@ -650,63 +512,53 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
             ) : <div />}
             <button className="btn" style={{ gridColumn: '1 / -1' }}>Tambah Aset</button>
           </form>
-        </CardSection>
+        </div>
 
         {/* Kontributor */}
-        <CardSection title="Kontributor">
-          {db.contributors.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '10px 0' }}>Belum ada kontributor.</p>}
+        <div className="card" style={{ padding: 20 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)', marginBottom: 8 }}>Kontributor</h2>
+          {db.contributors.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '8px 0' }}>Belum ada kontributor.</p>}
           {[...db.contributors].sort((a, b) => a.sort_order - b.sort_order).map((c) => (
-            <ListRow
-              key={c.id}
-              label={c.name}
-              onEdit={() => openEditContrib(c)}
-              onDelete={() => tryDeleteContrib(c)}
-            />
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+              <button className="btn-ghost" aria-label={`Ubah ${c.name}`} onClick={() => openEditContrib(c)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}><Pencil size={14} /></button>
+              <button className="btn-ghost" aria-label={`Hapus ${c.name}`} onClick={() => tryDeleteContrib(c)} style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}>✕</button>
+            </div>
           ))}
           <form onSubmit={addContrib} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <input className="input" placeholder="Nama kontributor" value={contribName} onChange={(e) => { setContribName(e.target.value); setContribNameError(null) }} />
-              <button className="btn" style={{ flexShrink: 0 }}>Tambah</button>
+              <button className="btn" style={{ flexShrink: 0 }}>+</button>
             </div>
             {contribNameError && <p style={{ fontSize: 12, color: 'var(--expense)', margin: 0 }}>{contribNameError}</p>}
           </form>
-          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Dicatat per transaksi investasi untuk menghitung porsi masing-masing.</p>
-        </CardSection>
+          <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>Dicatat per transaksi investasi untuk menghitung porsi masing-masing.</p>
+        </div>
 
         {/* Data & Akun */}
-        <CardSection title="Data dan Akun">
-          <div style={{ paddingTop: 4 }}>
+        <div className="card" style={{ padding: 20 }}>
+          <h2 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)', marginBottom: 12 }}>Data dan Akun</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {[
               { label: 'Ekspor transaksi (CSV)', action: () => downloadCSV('transaksi.csv', [['tanggal','jenis','nominal','kategori','rekening','catatan'], ...db.transactions.map((t) => [t.occurred_on, t.kind, t.amount, db.categories.find((c) => c.id === t.category_id)?.name ?? '', db.accounts.find((a) => a.id === t.account_id)?.name ?? '', t.note])]) },
               { label: 'Ekspor investasi (CSV)', action: () => downloadCSV('investasi.csv', [['tanggal','aset','platform','sisi','jumlah','harga_per_unit','fee'], ...db.trades.map((t) => [t.traded_on, db.assets.find((a) => a.id === t.asset_id)?.symbol ?? '', db.platforms.find((p) => p.id === t.platform_id)?.name ?? '', t.side, t.quantity, t.price_per_unit, t.fee])]) },
               { label: 'Sinkronkan sekarang', action: () => void refresh() },
             ].map(({ label, action }) => (
-              <button
-                key={label}
-                className="btn-ghost"
-                onClick={action}
-                style={{ justifyContent: 'flex-start', width: '100%', marginBottom: 2, borderRadius: 'var(--radius-sm)' }}
-              >
+              <button key={label} className="btn-ghost" onClick={action} style={{ justifyContent: 'flex-start', width: '100%' }}>
                 {label}
               </button>
             ))}
-            <p className="muted" style={{ fontSize: 12, padding: '8px 0' }}>
-              Menunggu: {pending} · Gagal: {failed}
-            </p>
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-              <button
-                className="btn-ghost"
-                onClick={onLogout}
-                style={{ justifyContent: 'flex-start', color: 'var(--expense)', width: '100%' }}
-              >
-                Keluar dari akun
-              </button>
-            </div>
           </div>
-        </CardSection>
+          <p className="muted" style={{ fontSize: 11, margin: '10px 0' }}>Menunggu: {pending} · Gagal: {failed}</p>
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <button className="btn-ghost" onClick={onLogout} style={{ justifyContent: 'flex-start', color: 'var(--expense)', width: '100%' }}>
+              Keluar dari akun
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Sheets & Dialogs */}
+      {/* ── Sheets & Dialogs ─────────────────────────── */}
       <Sheet open={editingAcc !== null} onClose={closeEditAcc} title="Ubah Rekening" footer={<><button type="button" className="btn-ghost" onClick={closeEditAcc}>Batal</button><button type="submit" form="edit-acc-form" className="btn">Simpan</button></>}>
         <form id="edit-acc-form" onSubmit={submitEditAcc} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Field label="Nama rekening" htmlFor="edit-acc-name" error={editAccError ?? undefined}>
@@ -714,9 +566,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
           </Field>
           <Field label="Jenis" htmlFor="edit-acc-type">
             <select id="edit-acc-type" className="input" value={editAccType} onChange={(e) => setEditAccType(e.target.value as 'cash' | 'bank' | 'ewallet')}>
-              <option value="bank">Bank</option>
-              <option value="cash">Tunai</option>
-              <option value="ewallet">E-wallet</option>
+              <option value="bank">Bank</option><option value="cash">Tunai</option><option value="ewallet">E-wallet</option>
             </select>
           </Field>
           <Field label="Saldo awal" htmlFor="edit-acc-opening">
@@ -735,9 +585,9 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
       </Sheet>
 
       <ConfirmDialog open={confirmAcc !== null} title="Hapus Rekening" message={confirmAcc ? `Hapus rekening "${confirmAcc.name}"?` : ''} confirmLabel="Hapus" onConfirm={confirmDeleteAcc} onCancel={() => setConfirmAcc(null)} />
-      <ConfirmDialog open={blockedAcc !== null} title={blockedAcc ? `Tidak bisa menghapus ${blockedAcc.name}` : 'Tidak bisa menghapus'} message={blockedAcc?.message ?? ''} confirmLabel="Mengerti" onConfirm={() => setBlockedAcc(null)} onCancel={() => setBlockedAcc(null)} />
+      <ConfirmDialog open={blockedAcc !== null} title={blockedAcc ? `Tidak bisa menghapus ${blockedAcc.name}` : ''} message={blockedAcc?.message ?? ''} confirmLabel="Mengerti" onConfirm={() => setBlockedAcc(null)} onCancel={() => setBlockedAcc(null)} />
       <ConfirmDialog open={confirmDel !== null} title="Hapus" message={confirmDel ? `Hapus "${confirmDel.label}"?` : ''} confirmLabel="Hapus" onConfirm={() => { if (confirmDel) { remove(confirmDel.table, confirmDel.id); setConfirmDel(null) } }} onCancel={() => setConfirmDel(null)} />
-      <ConfirmDialog open={blockedAsset !== null} title={blockedAsset ? `Tidak bisa menghapus ${blockedAsset.name}` : 'Tidak bisa menghapus'} message={blockedAsset?.message ?? ''} confirmLabel="Mengerti" onConfirm={() => setBlockedAsset(null)} onCancel={() => setBlockedAsset(null)} />
+      <ConfirmDialog open={blockedAsset !== null} title={blockedAsset ? `Tidak bisa menghapus ${blockedAsset.name}` : ''} message={blockedAsset?.message ?? ''} confirmLabel="Mengerti" onConfirm={() => setBlockedAsset(null)} onCancel={() => setBlockedAsset(null)} />
       <ConfirmDialog open={pendingMode === 'investasi'} title="Ganti ke Mode Investasi?" message="Tab Transaksi dan Laporan akan disembunyikan. Data tidak akan terhapus dan bisa diakses kembali dengan mengganti mode ke Lengkap." confirmLabel="Ganti Mode" onConfirm={() => { setAccountMode('investasi'); setPendingMode(null) }} onCancel={() => setPendingMode(null)} />
       <ConfirmDialog open={pendingMode === 'lengkap'} title="Ganti ke Mode Lengkap?" message="Semua fitur ditampilkan kembali. Data tidak berubah." confirmLabel="Ganti Mode" onConfirm={() => { setAccountMode('lengkap'); setPendingMode(null) }} onCancel={() => setPendingMode(null)} />
       <ConfirmDialog open={confirmUnlock} title="Buka Kunci Mode?" message="Setelah dibuka, mode bisa diubah dari halaman ini." confirmLabel="Buka Kunci" onConfirm={() => { setModeLocked(false); setConfirmUnlock(false) }} onCancel={() => setConfirmUnlock(false)} />
