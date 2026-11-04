@@ -58,8 +58,8 @@ function RangePickerBody({
   const hasRange = !!(rangeMin && rangeMax)
 
   const summaryText = (() => {
-    if (!tempFrom && !tempTo) return 'Pilih bulan awal'
-    if (tempFrom && !tempTo) return `Dari ${shortMonthYear(tempFrom)}, pilih bulan akhir`
+    if (!tempFrom) return 'Pilih bulan'
+    if (tempFrom && !tempTo) return shortMonthYear(tempFrom)
     if (tempFrom && tempTo) {
       const a = tempFrom < tempTo ? tempFrom : tempTo
       const b = tempFrom < tempTo ? tempTo : tempFrom
@@ -238,9 +238,10 @@ export function PeriodPicker({ period, onChange, monthsWithData, summaryLabel, '
   }, [])
 
   const handleApply = useCallback(() => {
-    if (!tempFrom || !tempTo) return
-    const a = tempFrom <= tempTo ? tempFrom : tempTo
-    const b = tempFrom <= tempTo ? tempTo : tempFrom
+    if (!tempFrom) return
+    const end = tempTo ?? tempFrom
+    const a = tempFrom <= end ? tempFrom : end
+    const b = tempFrom <= end ? end : tempFrom
     onChange({ kind: 'custom', custom: { from: a, to: b } })
     closePicker()
   }, [tempFrom, tempTo, onChange, closePicker])
@@ -293,7 +294,7 @@ export function PeriodPicker({ period, onChange, monthsWithData, summaryLabel, '
   // 'all' dihapus dari UI; kalau masih ada di localStorage, perlakukan sebagai 'month'
   const effectiveKind: PeriodKind = period.kind === 'all' ? 'month' : period.kind
 
-  const canApply = !!(tempFrom && tempTo)
+  const canApply = !!tempFrom
 
   const pickerFooter = (
     <div style={{ display: 'flex', gap: 8 }}>
