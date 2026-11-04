@@ -466,3 +466,95 @@ export function summarize(positions: Position[], allTrades: TradeLite[], today =
     days,
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// contributorShares — porsi kontributor dari nilai portofolio.
+//
+// Asumsi perhitungan (dokumentasi lengkap di docs/DESIGN.md):
+// - Setoran bersih = total beli (qty*price+fee) dikurangi total jual (qty*price-fee).
+// - Porsi dihitung dari setoran bersih masing-masing kontributor dibagi total setoran
+//   bersih semua kontributor (termasuk "Tanpa nama").
+// - Jika setoran bersih seseorang negatif (jual lebih banyak dari beli), porsinya 0%.
+// - Nilai bagian = porsi * portfolioValue.
+// - Untung/rugi bagian = nilai bagian - setoran bersih.
+// - Jika total setoran bersih 0, semua porsi 0%.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ContributorShare {
+  contributorId: string | null  // null = tanpa nama
+  name: string
+  netDeposit: number      // setoran bersih (beli - jual)
+  sharePct: number        // porsi 0–1
+  shareValue: number      // porsi * portfolioValue
+  sharePL: number         // shareValue - netDeposit
+  capped: boolean         // true jika netDeposit negatif → porsi diset ke 0
+}
+
+interface TradeForShare {
+  side: 'buy' | 'sell'
+  quantity: number
+  price_per_unit: number
+  fee: number
+  contributor_id?: string | null
+}
+
+interface ContributorForShare {
+  id: string
+  name: string
+}
+
+export function contributorShares(
+  trades: TradeForShare[],
+  contributors: ContributorForShare[],
+  portfolioValue: number,
+): ContributorShare[] {
+  // Kelompokkan berdasarkan contributor_id (null = tanpa nama)
+  const depositMap = new Map<string | null, number>()
+
+  for (const t of trades) {
+    const cid = t.contributor_id ?? null
+    const cost =
+      t.side === 'buy'
+        ? t.quantity * t.price_per_unit + t.fee
+        : -(t.quantity * t.price_per_unit - t.fee)
+    depositMap.set(cid, (depositMap.get(cid) ?? 0) + cost)
+  }
+
+  // Kumpulkan semua kontributor unik yang muncul dalam trades
+  const allIds = new Set<string | null>(depositMap.keys())
+  const contribById = new Map(contributors.map((c) => [c.id, c]))
+
+  // Hitung total setoran bersih positif (denominator untuk porsi)
+  let totalPositiveDeposit = 0
+  for (const [, dep] of depositMap) {
+    if (dep > 0) totalPositiveDeposit += dep
+  }
+
+  const shares: ContributorShare[] = []
+  for (const cid of allIds) {
+    const netDeposit = depositMap.get(cid) ?? 0
+    const capped = netDeposit <= 0
+    const rawDeposit = capped ? 0 : netDeposit
+    const sharePct = totalPositiveDeposit > 0 ? rawDeposit / totalPositiveDeposit : 0
+    const shareValue = sharePct * portfolioValue
+    const name = cid == null ? 'Tanpa nama' : (contribById.get(cid)?.name ?? 'Tanpa nama')
+    shares.push({
+      contributorId: cid,
+      name,
+      netDeposit,
+      sharePct,
+      shareValue,
+      sharePL: shareValue - rawDeposit,
+      capped,
+    })
+  }
+
+  // Urutkan: kontributor bernama dulu (urut nama), lalu tanpa nama
+  shares.sort((a, b) => {
+    if (a.contributorId === null) return 1
+    if (b.contributorId === null) return -1
+    return a.name.localeCompare(b.name, 'id')
+  })
+
+  return shares
+}

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight, Pencil, Trash2 } from 'lucide-react'
+import { RefreshCw, Plus, ArrowDownLeft, ArrowUpRight, Pencil, Trash2, Info } from 'lucide-react'
 import { useStore } from '../lib/store'
+import { useMode } from '../lib/useMode'
 import { usePortfolio, toLite } from '../lib/usePortfolio'
-import { computePosition } from '../lib/calc'
+import { computePosition, contributorShares } from '../lib/calc'
 import { dateLabel, formatPercent, idr, num, todayISO } from '../lib/format'
+import { formatShort } from '../lib/amount'
 import { getOrCreateSnapshotId } from '../lib/prices'
 import { Sheet, EmptyState, Field, AmountText, MoneyInput, QuantityInput, ConfirmDialog } from '../ui'
 import type { Trade } from '../lib/types'
@@ -53,6 +55,7 @@ function MetricCell({
 
 export default function Investments() {
   const { db, save, remove, failedIds } = useStore()
+  const { mode: accountMode } = useMode()
   const { rows, total, prices, live, at, loading, refresh } = usePortfolio()
 
   // Simpan snapshot harga live sekali per aset per hari ke tabel price_snapshots
@@ -116,6 +119,9 @@ export default function Investments() {
   const [priceVal, setPriceVal] = useState<number | null>(null)
   const [feeVal, setFeeVal] = useState<number | null>(null)
   const [date, setDate] = useState(todayISO())
+  const [contributorId, setContributorId] = useState<string>(() => {
+    try { return localStorage.getItem('artha:last_contributor') ?? '' } catch { return '' }
+  })
   const [formError, setFormError] = useState('')
   const [manualVal, setManualVal] = useState<Record<string, number | null>>({})
 
@@ -133,6 +139,7 @@ export default function Investments() {
     if (last && db.accounts.some((a) => a.id === last)) setAccountId(last)
     else if (!db.accounts.some((a) => a.id === accountId))
       setAccountId(db.accounts[0]?.id ?? '')
+    // Pertahankan contributorId terakhir
     setFormError('')
     setOpen(true)
   }
@@ -148,6 +155,7 @@ export default function Investments() {
     setPriceVal(t.price_per_unit)
     setFeeVal(t.fee || null)
     setDate(t.traded_on)
+    setContributorId(t.contributor_id ?? '')
     setFormError('')
     setOpen(true)
   }
@@ -165,14 +173,20 @@ export default function Investments() {
     if (f < 0) return setFormError('Biaya tidak valid.')
     const perUnit = mode === 'total' ? p / q : p
 
-    // Rekening wajib untuk catatan baru; saat edit, boleh kosong (migrasi dari data lama)
-    if (!editTrade && !effectiveAccountId) {
+    // Rekening wajib untuk catatan baru di mode lengkap; mode investasi simpan null
+    if (accountMode === 'lengkap' && !editTrade && !effectiveAccountId) {
       setFormError(
         side === 'buy'
           ? 'Pilih sumber dana (rekening) dulu.'
           : 'Pilih rekening tujuan dulu.',
       )
       return
+    }
+
+    const saveAccountId = accountMode === 'investasi' ? null : (effectiveAccountId || null)
+    const saveCid = contributorId || null
+    if (saveCid) {
+      try { localStorage.setItem('artha:last_contributor', saveCid) } catch { /* ignore */ }
     }
 
     if (editTrade) {
@@ -207,7 +221,8 @@ export default function Investments() {
         ...editTrade,
         asset_id: effectiveAssetId,
         platform_id: effectivePlatformId || null,
-        account_id: effectiveAccountId || null,
+        account_id: saveAccountId,
+        contributor_id: saveCid,
         side,
         quantity: q,
         price_per_unit: perUnit,
@@ -219,7 +234,8 @@ export default function Investments() {
       save('trades', {
         asset_id: effectiveAssetId,
         platform_id: effectivePlatformId || null,
-        account_id: effectiveAccountId || null,
+        account_id: saveAccountId,
+        contributor_id: saveCid,
         side,
         quantity: q,
         price_per_unit: perUnit,
@@ -285,6 +301,11 @@ export default function Investments() {
   const history = useMemo(
     () => [...db.trades].sort((a, b) => b.traded_on.localeCompare(a.traded_on)),
     [db.trades],
+  )
+
+  const contribShares = useMemo(
+    () => contributorShares(db.trades, db.contributors, total.value),
+    [db.trades, db.contributors, total.value],
   )
 
   const shortHistory = total.days < 365
@@ -401,6 +422,125 @@ export default function Investments() {
               />
             </div>
           </div>
+
+          {/* Porsi Kontributor — tampil di kedua mode bila ada kontributor */}
+          {db.contributors.length > 0 && contribShares.length > 0 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--text-3)',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  marginBottom: 12,
+                }}
+              >
+                Porsi Kontributor
+              </div>
+              {contribShares.map((s) => {
+                const pct = `${(s.sharePct * 100).toFixed(1)}%`
+                return (
+                  <div
+                    key={s.contributorId ?? '__none__'}
+                    style={{
+                      marginBottom: 10,
+                      paddingBottom: 10,
+                      borderBottom: '1px solid var(--border)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                        gap: 10,
+                        marginBottom: 4,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>
+                        {s.name}
+                      </span>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: 'var(--invest)',
+                          }}
+                        >
+                          {pct}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 13,
+                            color: 'var(--text-1)',
+                          }}
+                        >
+                          {formatShort(s.shareValue)}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 12,
+                            color: s.sharePL >= 0 ? 'var(--income)' : 'var(--expense)',
+                          }}
+                        >
+                          {s.sharePL >= 0 ? '+' : ''}{formatShort(s.sharePL)}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          height: 6,
+                          borderRadius: 3,
+                          background: 'var(--surface-2)',
+                          border: '1px solid var(--border)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${Math.max(2, s.sharePct * 100)}%`,
+                            background: 'var(--invest)',
+                            borderRadius: 3,
+                            transition: 'width 300ms ease-out',
+                          }}
+                        />
+                      </div>
+                      <span className="muted" style={{ fontSize: 12, minWidth: 60, textAlign: 'right' as const }}>
+                        setoran {formatShort(Math.max(0, s.netDeposit))}
+                      </span>
+                    </div>
+                    {s.capped && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          marginTop: 4,
+                          fontSize: 12,
+                          color: 'var(--warn)',
+                        }}
+                      >
+                        <Info size={12} />
+                        Setoran bersih negatif, porsi dihitung 0%
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                Porsi dihitung dari setoran bersih (beli dikurangi jual).
+              </p>
+            </div>
+          )}
 
           {/* Per aset */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
@@ -605,6 +745,9 @@ export default function Investments() {
                 const accName = t.account_id
                   ? db.accounts.find((x) => x.id === t.account_id)?.name
                   : null
+                const contribName = t.contributor_id
+                  ? db.contributors.find((x) => x.id === t.contributor_id)?.name
+                  : null
                 const unsaved = failedIds.has(t.id)
                 const isBuy = t.side === 'buy'
                 return (
@@ -664,7 +807,15 @@ export default function Investments() {
                           {' · @ '}
                           {idr(t.price_per_unit)}
                         </span>
-                        {!accName && (
+                        {contribName && (
+                          <span
+                            className="chip chip-invest"
+                            style={{ fontSize: 12, padding: '1px 7px' }}
+                          >
+                            {contribName}
+                          </span>
+                        )}
+                        {accountMode === 'lengkap' && !accName && (
                           <button
                             type="button"
                             className="chip chip-warn"
@@ -797,26 +948,47 @@ export default function Investments() {
             </select>
           </Field>
 
-          <Field label={side === 'buy' ? 'Sumber dana' : 'Masuk ke rekening'} htmlFor="inv-acc">
-            <select
-              id="inv-acc"
-              className="input"
-              value={effectiveAccountId}
-              onChange={(e) => setAccountId(e.target.value)}
-            >
-              <option value="">Belum ditentukan</option>
-              {db.accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-            {db.accounts.length === 0 && (
-              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                Belum ada rekening. Tambahkan di Pengaturan.
-              </p>
-            )}
-          </Field>
+          {accountMode === 'lengkap' && (
+            <Field label={side === 'buy' ? 'Sumber dana' : 'Masuk ke rekening'} htmlFor="inv-acc">
+              <select
+                id="inv-acc"
+                className="input"
+                value={effectiveAccountId}
+                onChange={(e) => setAccountId(e.target.value)}
+              >
+                <option value="">Belum ditentukan</option>
+                {db.accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+              {db.accounts.length === 0 && (
+                <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  Belum ada rekening. Tambahkan di Pengaturan.
+                </p>
+              )}
+            </Field>
+          )}
+
+          {db.contributors.length > 0 && (
+            <Field label="Disetor oleh" htmlFor="inv-contrib">
+              <select
+                id="inv-contrib"
+                className="input"
+                value={contributorId}
+                onChange={(e) => setContributorId(e.target.value)}
+              >
+                <option value="">Tanpa nama</option>
+                {db.contributors
+                  .slice()
+                  .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'id'))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+              </select>
+            </Field>
+          )}
 
           <Field label={`Jumlah didapat (${asset?.unit ?? 'unit'})`} htmlFor="inv-qty">
             <QuantityInput
