@@ -299,7 +299,7 @@ export function portfolioSeries(
   priceHistory: SeriesPriceInput[],
   currentPrices: Record<string, number>,
   filter: string, // 'all' atau asset_id
-  range: 6 | 12 | 'all',
+  range: number | 'all' | { from: string; to: string },
   today: string,
 ): SeriesPoint[] {
   const todayMonth = monthOf(today)
@@ -326,8 +326,10 @@ export function portfolioSeries(
 
   // Apply range window
   let months = allMonths
-  if (range === 6 || range === 12) {
+  if (typeof range === 'number') {
     months = allMonths.slice(-range)
+  } else if (typeof range === 'object') {
+    months = allMonths.filter((m) => m >= range.from && m <= range.to)
   }
   if (months.length === 0) return []
 

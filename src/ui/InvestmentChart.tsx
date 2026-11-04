@@ -3,20 +3,48 @@ import type { Trade, Asset, PriceSnapshot } from '../lib/types'
 import { portfolioSeries, type SeriesPoint } from '../lib/calc'
 import { formatShort } from '../lib/amount'
 import { formatPercent, idr, todayISO } from '../lib/format'
+import { shortMonthYear } from '../lib/period'
 import { useContainerWidth } from '../lib/useContainerWidth'
+import { Sheet } from './Sheet'
 
-type Period = 6 | 12 | 'all'
+type ChartCustomRange = { from: string; to: string }
+type Period = 1 | 3 | 6 | 12 | 'all' | 'custom'
+
+const MK_NAMES = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
+const MK_NAMES_FULL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
+
+function mkAdd(key: string, delta: number): string {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+function todayMk(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
 
 function readPeriod(): Period {
   try {
     const v = localStorage.getItem('artha:chart:period')
+    if (v === '1') return 1
+    if (v === '3') return 3
     if (v === '6') return 6
     if (v === '12') return 12
     if (v === 'all') return 'all'
-  } catch {
-    // abaikan
-  }
-  return 12
+    if (v === 'custom') return 'custom'
+  } catch { /* abaikan */ }
+  return 1
+}
+
+function readCustomRange(): ChartCustomRange | null {
+  try {
+    const v = localStorage.getItem('artha:chart:custom')
+    if (v) {
+      const p = JSON.parse(v) as Record<string, unknown>
+      if (typeof p.from === 'string' && typeof p.to === 'string') return { from: p.from as string, to: p.to as string }
+    }
+  } catch { /* abaikan */ }
+  return null
 }
 
 function readAsset(): string {
@@ -164,6 +192,14 @@ export function InvestmentChart({
 
   const [filterAsset, setFilterAsset] = useState<string>(() => readAsset())
   const [period, setPeriod] = useState<Period>(() => readPeriod())
+  const [customRange, setCustomRange] = useState<ChartCustomRange | null>(() => readCustomRange())
+
+  // State picker kustom
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerFrom, setPickerFrom] = useState<string | null>(null)
+  const [pickerTo, setPickerTo] = useState<string | null>(null)
+  const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear())
+
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const [showTable, setShowTable] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
@@ -180,6 +216,11 @@ export function InvestmentChart({
   useEffect(() => {
     try { localStorage.setItem('artha:chart:period', String(period)) } catch { /* abaikan */ }
   }, [period])
+  useEffect(() => {
+    if (customRange) {
+      try { localStorage.setItem('artha:chart:custom', JSON.stringify(customRange)) } catch { /* abaikan */ }
+    }
+  }, [customRange])
 
   // Validasi filterAsset terhadap daftar aset — HANYA bila daftar sudah termuat
   useEffect(() => {
@@ -187,12 +228,6 @@ export function InvestmentChart({
     if (assets.length === 0) return  // masih memuat, jangan reset
     if (!assets.some((a) => a.id === filterAsset)) setFilterAsset('all')
   }, [assets, filterAsset])
-
-  // Reset hover saat data berubah
-  useEffect(() => {
-    setHoveredIdx((idx) => (idx != null && idx < series.length ? idx : null))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trades.length, filterAsset, period])
 
   const priceBySymbol = useMemo<Record<string, number>>(() => {
     const out: Record<string, number> = {}
@@ -209,6 +244,11 @@ export function InvestmentChart({
     return out
   }, [assets, currentPrices])
 
+  const chartRange = useMemo<number | 'all' | ChartCustomRange>(() => {
+    if (period === 'custom') return customRange ?? 1
+    return period
+  }, [period, customRange])
+
   const series = useMemo<SeriesPoint[]>(() => {
     return portfolioSeries(
       trades,
@@ -216,10 +256,16 @@ export function InvestmentChart({
       priceHistory,
       priceBySymbol,
       filterAsset,
-      period,
+      chartRange,
       today,
     )
-  }, [trades, assets, priceHistory, priceBySymbol, filterAsset, period, today])
+  }, [trades, assets, priceHistory, priceBySymbol, filterAsset, chartRange, today])
+
+  // Reset hover saat data berubah
+  useEffect(() => {
+    setHoveredIdx((idx) => (idx != null && idx < series.length ? idx : null))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades.length, filterAsset, chartRange])
 
   // ── Info aset terpilih (untuk pesan kosong)
   const selectedAsset = filterAsset !== 'all'
@@ -413,85 +459,185 @@ export function InvestmentChart({
         </div>
       </div>
 
-      {/* ── SELALU TAMPIL: Chip aset + chip periode */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          flexWrap: 'wrap',
-          marginBottom: 12,
-          alignItems: 'center',
-        }}
-      >
-        {/* Chip aset — scrollable horizontal */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, minWidth: 0 }}>
-          <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            Aset:
-          </span>
-          <ChipBar>
-            <Chip
-              label="Semua"
-              active={filterAsset === 'all'}
-              onClick={() => setFilterAsset('all')}
-            />
-            {assets.map((a) => (
-              <Chip
-                key={a.id}
-                label={a.symbol}
-                active={filterAsset === a.id}
-                onClick={() => setFilterAsset(a.id)}
-              />
-            ))}
-          </ChipBar>
-        </div>
-
-        {/* Chip periode */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-          <span className="muted" style={{ fontSize: 12 }}>Periode:</span>
-        <div
-          role="radiogroup"
-          aria-label="Rentang waktu"
-          style={{
-            display: 'inline-flex',
-            gap: 2,
-            background: 'var(--surface-2)',
-            borderRadius: 'var(--radius-sm)',
-            padding: 2,
-            border: '1px solid var(--border)',
-            flexShrink: 0,
-          }}
-        >
-          {([6, 12, 'all'] as const).map((p) => {
-            const active = period === p
-            return (
-              <button
-                key={String(p)}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setPeriod(p)}
-                style={{
-                  minHeight: 44,
-                  minWidth: 44,
-                  padding: '3px 12px',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  fontFamily: 'inherit',
-                  background: active ? 'var(--surface)' : 'transparent',
-                  color: active ? 'var(--text-1)' : 'var(--text-2)',
-                  border: active ? '1px solid var(--border)' : '1px solid transparent',
-                  borderRadius: 'calc(var(--radius-sm) - 2px)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap' as const,
-                }}
-              >
-                {p === 'all' ? 'Maks' : `${p}B`}
-              </button>
-            )
-          })}
-        </div>
-        </div>
+      {/* ── SELALU TAMPIL: Aset (baris 1) */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+        <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          Aset
+        </span>
+        <ChipBar>
+          <Chip label="Semua" active={filterAsset === 'all'} onClick={() => setFilterAsset('all')} />
+          {assets.map((a) => (
+            <Chip key={a.id} label={a.symbol} active={filterAsset === a.id} onClick={() => setFilterAsset(a.id)} />
+          ))}
+        </ChipBar>
       </div>
+
+      {/* ── SELALU TAMPIL: Periode (baris 2) */}
+      <div style={{ marginBottom: 12 }}>
+        <ChipBar>
+          {([
+            { v: 1 as Period, label: 'Bulan ini' },
+            { v: 3 as Period, label: '3B' },
+            { v: 6 as Period, label: '6B' },
+            { v: 12 as Period, label: '12B' },
+            { v: 'all' as Period, label: 'Maks' },
+            {
+              v: 'custom' as Period,
+              label: period === 'custom' && customRange
+                ? (customRange.from === customRange.to
+                  ? shortMonthYear(customRange.from)
+                  : `${shortMonthYear(customRange.from)}–${shortMonthYear(customRange.to)}`)
+                : 'Kustom',
+            },
+          ]).map(({ v, label }) => (
+            <Chip
+              key={String(v)}
+              label={label}
+              active={period === v}
+              onClick={() => {
+                if (v === 'custom') {
+                  if (customRange) {
+                    setPickerFrom(customRange.from)
+                    setPickerTo(customRange.to)
+                    setPickerYear(parseInt(customRange.to.slice(0, 4)))
+                  } else {
+                    setPickerFrom(null)
+                    setPickerTo(null)
+                    setPickerYear(new Date().getFullYear())
+                  }
+                  setPickerOpen(true)
+                } else {
+                  setPeriod(v)
+                }
+              }}
+            />
+          ))}
+        </ChipBar>
+      </div>
+
+      {/* ── Picker kustom */}
+      <Sheet
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        title="Pilih Rentang Bulan"
+        footer={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-ghost" onClick={() => setPickerOpen(false)} style={{ flex: 1, minHeight: 44 }}>
+              Batal
+            </button>
+            <button
+              className="btn"
+              disabled={!pickerFrom}
+              onClick={() => {
+                if (!pickerFrom) return
+                const end = pickerTo ?? pickerFrom
+                const a = pickerFrom <= end ? pickerFrom : end
+                const b = pickerFrom <= end ? end : pickerFrom
+                setCustomRange({ from: a, to: b })
+                setPeriod('custom')
+                setPickerOpen(false)
+              }}
+              style={{ flex: 2, minHeight: 44 }}
+            >
+              Terapkan
+            </button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Navigasi tahun */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <button
+              className="btn-ghost"
+              onClick={() => setPickerYear((y) => y - 1)}
+              aria-label="Tahun sebelumnya"
+              style={{ minHeight: 44, minWidth: 44, padding: '0 8px', border: 'none', borderRadius: 'var(--radius-sm)' }}
+            >
+              ‹
+            </button>
+            <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)' }}>{pickerYear}</span>
+            <button
+              className="btn-ghost"
+              onClick={() => setPickerYear((y) => y + 1)}
+              disabled={pickerYear >= new Date().getFullYear()}
+              aria-label="Tahun berikutnya"
+              style={{ minHeight: 44, minWidth: 44, padding: '0 8px', border: 'none', borderRadius: 'var(--radius-sm)' }}
+            >
+              ›
+            </button>
+          </div>
+
+          {/* Grid 4x3 bulan */}
+          <div
+            role="grid"
+            aria-label={`Pilih bulan tahun ${pickerYear}`}
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}
+          >
+            {MK_NAMES.map((name, i) => {
+              const mk = `${pickerYear}-${String(i + 1).padStart(2, '0')}`
+              const todayKey = todayMk()
+              const isFuture = mk > todayKey
+              const isStart = pickerFrom === mk
+              const isEnd = pickerTo === mk
+              const rangeMin = pickerFrom && pickerTo ? (pickerFrom < pickerTo ? pickerFrom : pickerTo) : null
+              const rangeMax = pickerFrom && pickerTo ? (pickerFrom > pickerTo ? pickerFrom : pickerTo) : null
+              const inRange = !!(rangeMin && rangeMax && mk > rangeMin && mk < rangeMax)
+              const isSelected = isStart || isEnd
+              return (
+                <button
+                  key={mk}
+                  role="gridcell"
+                  aria-label={`${MK_NAMES_FULL[i]} ${pickerYear}`}
+                  aria-pressed={isSelected}
+                  aria-disabled={isFuture}
+                  disabled={isFuture}
+                  onClick={() => {
+                    if (!pickerFrom || pickerTo) {
+                      setPickerFrom(mk); setPickerTo(null)
+                    } else {
+                      setPickerTo(mk)
+                    }
+                  }}
+                  style={{
+                    minHeight: 44,
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    background: isSelected
+                      ? 'var(--primary)'
+                      : inRange
+                        ? 'color-mix(in srgb, var(--primary) 15%, transparent)'
+                        : 'transparent',
+                    color: isSelected
+                      ? 'var(--primary-fg)'
+                      : isFuture
+                        ? 'var(--text-3)'
+                        : 'var(--text-1)',
+                    fontSize: 13,
+                    fontWeight: isSelected ? 600 : 400,
+                    cursor: isFuture ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {name}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Teks ringkasan */}
+          <div className="muted" style={{ fontSize: 13, minHeight: 20 }} aria-live="polite">
+            {!pickerFrom
+              ? 'Pilih bulan awal'
+              : !pickerTo
+                ? shortMonthYear(pickerFrom)
+                : (() => {
+                    const a = pickerFrom <= pickerTo ? pickerFrom : pickerTo
+                    const b = pickerFrom <= pickerTo ? pickerTo : pickerFrom
+                    return a === b ? shortMonthYear(a) : `${shortMonthYear(a)} sampai ${shortMonthYear(b)}`
+                  })()}
+          </div>
+        </div>
+      </Sheet>
 
       {/* ── Area grafik — tinggi tetap, konten bervariasi */}
       {noTradesAtAll && (
