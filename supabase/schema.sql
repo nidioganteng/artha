@@ -127,6 +127,11 @@ alter table public.trades add column if not exists account_id uuid references pu
 create index if not exists trades_user_asset_idx on public.trades(user_id, asset_id, traded_on);
 create index if not exists trades_account_id_idx on public.trades(account_id);
 
+-- Kolom trade_id: transaksi yang dibuat otomatis saat mencatat DCA/jual investasi.
+-- ON DELETE CASCADE: ketika trade dihapus, transaksi tautannya ikut terhapus di server.
+alter table public.transactions add column if not exists trade_id uuid references public.trades(id) on delete cascade;
+create index if not exists transactions_trade_id_idx on public.transactions(trade_id);
+
 -- ---------- Row Level Security: setiap user hanya melihat datanya sendiri ----------
 do $$
 declare t text;
