@@ -1088,57 +1088,6 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-      {/* Segmented: Ringkasan | Laporan — hanya di mobile + mode lengkap */}
-      {accountMode === 'lengkap' && <div
-        className="md:hidden"
-        style={{
-          display: 'flex',
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 2,
-          gap: 2,
-        }}
-      >
-        <button
-          aria-current="page"
-          style={{
-            flex: 1,
-            minHeight: 44,
-            padding: '0 16px',
-            borderRadius: 'calc(var(--radius-md) - 2px)',
-            border: 'none',
-            background: 'var(--surface)',
-            color: 'var(--text-1)',
-            fontWeight: 600,
-            fontSize: 14,
-            cursor: 'default',
-            fontFamily: 'inherit',
-            boxShadow: 'var(--shadow-sm)',
-          }}
-        >
-          Ringkasan
-        </button>
-        <button
-          onClick={() => goto('lap')}
-          style={{
-            flex: 1,
-            minHeight: 44,
-            padding: '0 16px',
-            borderRadius: 'calc(var(--radius-md) - 2px)',
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--text-2)',
-            fontWeight: 500,
-            fontSize: 14,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          Laporan
-        </button>
-      </div>}
-
       {/* Page header */}
       <h1
         style={{
