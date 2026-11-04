@@ -70,7 +70,7 @@ function Chip({
         fontSize: 13,
         fontWeight: active ? 600 : 400,
         cursor: 'pointer',
-        minHeight: 34,
+        minHeight: 44,
         fontFamily: 'inherit',
         whiteSpace: 'nowrap' as const,
         transition: 'background 120ms ease-out, color 120ms ease-out',
@@ -238,7 +238,7 @@ export function InvestmentChart({
   const anyEstimate = series.some((p) => p.quality === 'estimate')
 
   // ── Geometri SVG
-  const padL = 8, padR = 8, padT = 10, padB = 28
+  const padL = 56, padR = 8, padT = 10, padB = 28
   const chartW = Math.max(50, W - padL - padR)
   const chartH = H - padT - padB
 
@@ -420,27 +420,34 @@ export function InvestmentChart({
           gap: 12,
           flexWrap: 'wrap',
           marginBottom: 12,
-          alignItems: 'flex-start',
+          alignItems: 'center',
         }}
       >
         {/* Chip aset — scrollable horizontal */}
-        <ChipBar>
-          <Chip
-            label="Semua"
-            active={filterAsset === 'all'}
-            onClick={() => setFilterAsset('all')}
-          />
-          {assets.map((a) => (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, minWidth: 0 }}>
+          <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            Aset:
+          </span>
+          <ChipBar>
             <Chip
-              key={a.id}
-              label={a.symbol}
-              active={filterAsset === a.id}
-              onClick={() => setFilterAsset(a.id)}
+              label="Semua"
+              active={filterAsset === 'all'}
+              onClick={() => setFilterAsset('all')}
             />
-          ))}
-        </ChipBar>
+            {assets.map((a) => (
+              <Chip
+                key={a.id}
+                label={a.symbol}
+                active={filterAsset === a.id}
+                onClick={() => setFilterAsset(a.id)}
+              />
+            ))}
+          </ChipBar>
+        </div>
 
         {/* Chip periode */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <span className="muted" style={{ fontSize: 12 }}>Periode:</span>
         <div
           role="radiogroup"
           aria-label="Rentang waktu"
@@ -464,9 +471,9 @@ export function InvestmentChart({
                 aria-checked={active}
                 onClick={() => setPeriod(p)}
                 style={{
-                  minHeight: 30,
-                  padding: '3px 10px',
-                  fontSize: 12,
+                  minHeight: 44,
+                  padding: '3px 12px',
+                  fontSize: 13,
                   fontWeight: 600,
                   fontFamily: 'inherit',
                   background: active ? 'var(--surface)' : 'transparent',
@@ -477,10 +484,11 @@ export function InvestmentChart({
                   whiteSpace: 'nowrap' as const,
                 }}
               >
-                {p === 'all' ? 'Semua' : `${p}B`}
+                {p === 'all' ? 'Maks' : `${p}B`}
               </button>
             )
           })}
+        </div>
         </div>
       </div>
 
@@ -612,13 +620,14 @@ export function InvestmentChart({
                 />
               ))}
 
-              {/* Label Y */}
+              {/* Label Y — ditempatkan di kiri chart (x=2 s/d padL-4) */}
               {yTicks.map((v, i) => (
                 <text
                   key={`ty-${i}`}
-                  x={padL + 2}
+                  x={2}
                   y={yFor(v) - 3}
-                  fontSize="10"
+                  fontSize="11"
+                  textAnchor="start"
                   fill="var(--text-3)"
                   style={{ fontFamily: 'var(--font-mono)' }}
                 >
@@ -678,7 +687,7 @@ export function InvestmentChart({
                     key={`tx-${i}`}
                     x={xFor(i)}
                     y={H - 8}
-                    fontSize="10"
+                    fontSize="11"
                     textAnchor="middle"
                     fill="var(--text-3)"
                   >

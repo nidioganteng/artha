@@ -34,7 +34,7 @@ function MetricCell({
   const valStyle = { fontSize: 13, fontWeight: 600, color: color ?? 'var(--text-1)' } as const
   return (
     <div style={{ minWidth: 0 }}>
-      <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 2 }}>
         {label}
       </div>
       {amount !== undefined ? (
@@ -673,6 +673,9 @@ export default function Investments() {
                               border: 'none',
                               cursor: 'pointer',
                               fontFamily: 'inherit',
+                              minHeight: 44,
+                              padding: '0 12px',
+                              alignSelf: 'center',
                             }}
                             aria-label="Tentukan sumber dana"
                           >
