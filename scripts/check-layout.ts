@@ -4,13 +4,11 @@
 // Statis  : analisis src/App.tsx, Sheet.tsx, Dashboard.tsx, index.css, index.html, theme.tsx
 // Browser : build VITE_SHELL_PREVIEW=true, preview server port 4174, Playwright Chromium
 
-import { readFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
+import { readFileSync, existsSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { execSync, spawn, type ChildProcess } from 'node:child_process'
 
 const ROOT = resolve(import.meta.dirname, '..')
-const QA_DIR = resolve(ROOT, 'docs/qa/verify')
-const UI_AUDIT_DIR = resolve(ROOT, 'docs/ui-audit')
 
 function read(rel: string) {
   return readFileSync(resolve(ROOT, rel), 'utf8')
@@ -216,14 +214,6 @@ check('Dashboard.tsx: empty state periode', dash.includes('Belum ada catatan di 
 const PREVIEW_PORT = 4174
 const PREVIEW_DIST = resolve(ROOT, 'dist-preview')
 const WIDTHS = [390, 767, 768, 1000, 1023, 1024, 1440]
-const SCREENSHOT_WIDTHS = [390, 768, 1000, 1440]
-const PAGE_TABS = ['home', 'tx', 'inv', 'rec', 'set']
-const SHEET_DEFS = [
-  { hash: 'tx',  label: 'Sheet-TambahTransaksi', btnText: 'Tambah' },
-  { hash: 'inv', label: 'Sheet-CatatDCA',         btnText: 'Catat DCA' },
-  { hash: 'rec', label: 'Sheet-TambahRutin',      btnText: 'Tambah' },
-]
-
 let serverProc: ChildProcess | null = null
 
 async function startServer(): Promise<void> {
@@ -855,30 +845,6 @@ async function runPlaywright() {
       await p.close()
     }
 
-    // ── InvestmentChart: tangkapan empty state palet A/B terang/gelap ──
-    mkdirSync(resolve(QA_DIR, '..', 'empty-state'), { recursive: true })
-    {
-      for (const pal of ['a', 'b'] as const) {
-        for (const mod of ['light', 'dark'] as const) {
-          const p = await browser.newPage()
-          await p.setViewportSize({ width: 390, height: 700 })
-          await p.goto(`${BASE}/#inv`)
-          await p.evaluate(`(function(pal, m) {
-            localStorage.setItem('artha:palette', pal);
-            localStorage.setItem('artha:mode', m);
-          })('${pal}', '${mod}')`)
-          await p.reload()
-          await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
-          await p.waitForTimeout(400)
-          const card = await p.$('[data-testid="investment-chart"]')
-          if (card) {
-            await card.screenshot({ path: resolve(QA_DIR, '..', 'empty-state', `invest-empty-${pal}-${mod}-390.png`) })
-          }
-          await p.close()
-        }
-      }
-    }
-
     // ── WAJIB LOLOS: Tidak ada scroll horizontal di semua halaman ──────────────
     for (const w of [360, 390, 768, 820, 1024, 1440]) {
       for (const tab of ['home', 'tx', 'inv', 'rec', 'set', 'lap']) {
@@ -1117,76 +1083,6 @@ async function runPlaywright() {
       check('Login reduced-motion: animasi float mati', !rm.anyAnimated, rm.detail)
       await p.close()
     }
-
-    // Login scene: tangkapan layar ke docs/ui-audit/
-    mkdirSync(UI_AUDIT_DIR, { recursive: true })
-    {
-      for (const pal of ['a', 'b'] as const) {
-        for (const mod of ['light', 'dark'] as const) {
-          for (const w of [360, 390, 768, 820]) {
-            const p = await browser.newPage()
-            await p.setViewportSize({ width: w, height: 700 })
-            await p.goto(`${BASE}/#login-preview`)
-            await p.evaluate(`(function(pal, m) {
-              localStorage.setItem('artha:palette', pal);
-              localStorage.setItem('artha:mode', m);
-            })('${pal}', '${mod}')`)
-            await p.reload()
-            await p.waitForSelector('#login-email', { timeout: 6000 }).catch(() => {})
-            await p.waitForTimeout(400)
-            await p.screenshot({ path: resolve(UI_AUDIT_DIR, 'login-' + pal + '-' + mod + '-' + w + '.png') })
-            await p.close()
-          }
-        }
-      }
-    }
-
-    // Tangkapan layar
-    mkdirSync(QA_DIR, { recursive: true })
-    console.log(`\n  Mengambil tangkapan layar ke docs/qa/verify/...`)
-    let n = 0
-
-    for (const pal of ['a', 'b'] as const) {
-      for (const mod of ['light', 'dark'] as const) {
-        const p = await browser.newPage()
-        await p.goto(BASE)
-        await p.evaluate(`(function(pal, m) {
-          localStorage.setItem('artha:palette', pal);
-          localStorage.setItem('artha:mode', m);
-        })('${pal}', '${mod}')`)
-
-        for (const w of SCREENSHOT_WIDTHS) {
-          await p.setViewportSize({ width: w, height: 700 })
-
-          for (const tab of PAGE_TABS) {
-            await p.evaluate(`location.hash = '${tab}'`)
-            await p.waitForTimeout(250)
-            await p.screenshot({ path: resolve(QA_DIR, `${pal}-${mod}-${w}-${tab}.png`) })
-            n++
-          }
-
-          for (const sh of SHEET_DEFS) {
-            await p.evaluate(`location.hash = '${sh.hash}'`)
-            await p.waitForTimeout(200)
-            const ok = await p.evaluate(`(function(txt) {
-              var btns = Array.from(document.querySelectorAll('button'));
-              var b = btns.find(function(b) { return b.textContent.trim() === txt && !b.closest('dialog'); });
-              if (b) { b.click(); return true; }
-              return false;
-            })('${sh.btnText}')`) as boolean
-            if (ok) {
-              await p.waitForTimeout(300)
-              await p.screenshot({ path: resolve(QA_DIR, `${pal}-${mod}-${w}-${sh.label}.png`) })
-              n++
-              await p.keyboard.press('Escape')
-              await p.waitForTimeout(200)
-            }
-          }
-        }
-        await p.close()
-      }
-    }
-    console.log(`  ${n} tangkapan layar disimpan.`)
 
   } finally {
     await browser.close()

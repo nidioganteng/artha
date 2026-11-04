@@ -38,6 +38,12 @@ const TABLES: TableName[] = [
 // user menjalankan migrasi SQL-nya.
 const OPTIONAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['price_snapshots', 'profiles', 'contributors', 'budgets'])
 
+// Kolom konflik upsert per tabel — tabel yang unique constraint-nya bukan hanya 'id'
+const UPSERT_CONFLICT: Partial<Record<TableName, string>> = {
+  price_snapshots: 'user_id,asset_id,date',
+  budgets: 'user_id,category_id',
+}
+
 const isMissingRelationError = (msg: string) =>
   /relation .* does not exist|could not find the table|schema cache/i.test(msg)
 
@@ -155,7 +161,7 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
         try {
           const res =
             op.op === 'upsert'
-              ? await supabase.from(op.table).upsert(op.row, { onConflict: 'id' })
+              ? await supabase.from(op.table).upsert(op.row, { onConflict: UPSERT_CONFLICT[op.table] ?? 'id' })
               : await supabase.from(op.table).delete().eq('id', op.id)
           msg = res.error ? res.error.message : null
         } catch (e) {
