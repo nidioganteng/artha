@@ -232,14 +232,13 @@
 @media (min-width: 768px) { .bento { gap: 16px; } }
 @media (min-width: 1024px) { .bento { gap: 20px; } }
 
-.bento-kpi     { grid-column: span 12; }
+.bento-kpi     { grid-column: span 6; }   /* 2×2 bahkan di mobile */
 .bento-hero    { grid-column: span 12; }
 .bento-summary { grid-column: span 12; }
 .bento-half    { grid-column: span 12; }
 .bento-full    { grid-column: span 12; }
 
 @media (min-width: 640px) {
-  .bento-kpi  { grid-column: span 6; }
   .bento-half { grid-column: span 6; }
 }
 

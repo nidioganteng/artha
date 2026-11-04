@@ -121,9 +121,9 @@ function DonutChart({ cats }: { cats: [string, number][] }) {
     return { name, v, d, color: CAT_TOKENS[i % CAT_TOKENS.length] }
   })
 
-  // Font size adaptif: muat dalam lingkaran dalam (radius ~41 unit SVG)
+  // Font size adaptif: muat dalam lingkaran dalam (radius ~41 unit SVG), minimum 11px
   const centerText = formatShort(total)
-  const centerFs = centerText.length <= 8 ? 13 : centerText.length <= 11 ? 11 : 9
+  const centerFs = centerText.length <= 8 ? 13 : 11
 
   return (
     <svg
@@ -134,7 +134,7 @@ function DonutChart({ cats }: { cats: [string, number][] }) {
       {slices.map((s) => (
         <path key={s.name} d={s.d} fill="none" stroke={s.color} strokeWidth={sw} strokeLinecap="butt" />
       ))}
-      <text x={cx} y={cy - 6} textAnchor="middle" style={{ fontSize: '10px', fill: 'var(--text-3)' }}>
+      <text x={cx} y={cy - 6} textAnchor="middle" style={{ fontSize: '11px', fill: 'var(--text-3)' }}>
         Total
       </text>
       <text
@@ -232,7 +232,7 @@ function BarChart({ data }: { data: { month: string; income: number; expense: nu
                 <text
                   x={x0 + groupW / 2} y={H - 10}
                   textAnchor="middle"
-                  style={{ fontSize: '9px', fill: 'var(--text-3)' }}
+                  style={{ fontSize: '11px', fill: 'var(--text-3)' }}
                 >
                   {lbl}
                 </text>
@@ -460,23 +460,29 @@ function PortfolioStack({
               <div style={{ fontSize: 15, fontWeight: 600 }}>{shown[0]?.name}</div>
             </div>
             {cards.length > 1 && (
-              <div style={{ display: 'flex', gap: 5, alignItems: 'center', paddingTop: 4 }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', paddingTop: 2, flexWrap: 'wrap' }}>
                 {cards.map((c, i) => (
                   <button
                     key={c.id}
                     onClick={() => setActiveIdx(i)}
                     aria-label={`Platform ${c.name}`}
+                    aria-pressed={i === activeIdx}
                     style={{
-                      width: i === activeIdx ? 18 : 8,
-                      height: 8,
-                      borderRadius: 4,
+                      minHeight: 32,
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-xl)',
                       border: 'none',
                       cursor: 'pointer',
-                      padding: 0,
-                      background: i === activeIdx ? 'var(--primary-fg)' : 'rgba(255,255,255,0.35)',
-                      transition: reduced ? 'none' : 'width 200ms ease-out',
+                      fontSize: 11,
+                      fontWeight: i === activeIdx ? 700 : 400,
+                      background: i === activeIdx ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
+                      color: 'var(--primary-fg)',
+                      transition: reduced ? 'none' : 'background 150ms ease-out, font-weight 150ms ease-out',
+                      fontFamily: 'inherit',
                     }}
-                  />
+                  >
+                    {c.name}
+                  </button>
                 ))}
               </div>
             )}
@@ -546,14 +552,16 @@ function PortfolioStack({
 function InvestmentSummary({
   total,
   goto,
+  className,
 }: {
   total: { value: number; totalBought: number; totalPL: number; roi: number | null | undefined; cagr: number | null | undefined }
   goto: (tab: string) => void
+  className?: string
 }) {
   const plPositive = total.totalPL >= 0
   return (
     <div
-      className="card bento-summary"
+      className={`card bento-summary${className ? ` ${className}` : ''}`}
       style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -905,15 +913,22 @@ function BalanceCard({ goto }: { goto: (tab: string) => void }) {
           onClick={() => goto('inv')}
           style={{
             marginTop: 12,
-            display: 'inline-flex',
-            alignItems: 'center',
+            display: 'flex',
+            alignItems: 'flex-start',
             gap: 6,
             cursor: 'pointer',
-            alignSelf: 'flex-start',
+            alignSelf: 'stretch',
+            whiteSpace: 'normal',
+            textAlign: 'left',
+            minHeight: 44,
+            lineHeight: 1.5,
+            borderRadius: 'var(--radius-md)',
           }}
         >
-          <AlertTriangle size={14} />
-          {unassigned.trades.length} catatan investasi belum ditentukan sumber dananya ({formatShort(unassigned.totalValue)})
+          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>
+            {unassigned.trades.length} catatan investasi belum ditentukan sumber dananya ({formatShort(unassigned.totalValue)})
+          </span>
         </button>
       )}
     </div>
@@ -924,9 +939,20 @@ function BalanceCard({ goto }: { goto: (tab: string) => void }) {
 // Dashboard
 // ──────────────────────────────────────────────────────
 export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
-  const { db } = useStore()
+  const { db, ready } = useStore()
   const { rows, total, at, live } = usePortfolio()
   const [month, setMonth] = useState(() => monthKey(todayISO()))
+  const monthDefaultSet = useRef(false)
+
+  useEffect(() => {
+    if (!ready || monthDefaultSet.current) return
+    monthDefaultSet.current = true
+    const today = monthKey(todayISO())
+    const txMonths = db.transactions.map((t) => monthKey(t.occurred_on))
+    if (txMonths.length === 0) return
+    const last = txMonths.reduce((a, b) => (a > b ? a : b))
+    if (last <= today) setMonth(last)
+  }, [ready, db.transactions])
 
   const m = useMemo(() => {
     const report = monthReport(month, db.accounts, db.categories, db.transactions, db.trades)
@@ -1000,6 +1026,57 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+      {/* Segmented: Ringkasan | Laporan — hanya di mobile, desktop pakai sidebar */}
+      <div
+        className="md:hidden"
+        style={{
+          display: 'flex',
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+          padding: 2,
+          gap: 2,
+        }}
+      >
+        <button
+          aria-current="page"
+          style={{
+            flex: 1,
+            minHeight: 40,
+            padding: '0 16px',
+            borderRadius: 'calc(var(--radius-md) - 2px)',
+            border: 'none',
+            background: 'var(--surface)',
+            color: 'var(--text-1)',
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: 'default',
+            fontFamily: 'inherit',
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          Ringkasan
+        </button>
+        <button
+          onClick={() => goto('lap')}
+          style={{
+            flex: 1,
+            minHeight: 40,
+            padding: '0 16px',
+            borderRadius: 'calc(var(--radius-md) - 2px)',
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-2)',
+            fontWeight: 500,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Laporan
+        </button>
+      </div>
+
       {/* Month selector */}
       <div
         style={{
@@ -1077,7 +1154,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
           goto={goto}
         />
 
-        <InvestmentSummary total={total} goto={goto} />
+        <InvestmentSummary total={total} goto={goto} className="hidden md:block" />
 
         {/* 2. Empat KPI bulan ini */}
         <KpiCard label="Pemasukan" value={m.income} token="var(--income)" index={0} testId="kpi-pemasukan" />
