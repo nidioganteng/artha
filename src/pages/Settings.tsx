@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Sun, Moon, Monitor, Pencil } from 'lucide-react'
+import { Sun, Moon, Monitor, Pencil, LayoutDashboard, TrendingUp } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { useTheme } from '../lib/theme'
+import { useMode } from '../lib/useMode'
 import type { FailedOp } from '../lib/store'
 import type { Account, Asset, Contributor, Kind, TableName } from '../lib/types'
 import type { Mode, Palette } from '../lib/theme'
@@ -120,7 +121,11 @@ function ListRow({ label, sub, onDelete }: { label: string; sub?: string; onDele
 export default function Settings({ onLogout, focusFailed }: { onLogout: () => void; focusFailed?: boolean }) {
   const { db, save, remove, refresh, pending, failed, failedOps, retryFailed, discardFailed } = useStore()
   const { mode, setMode, palette, setPalette } = useTheme()
+  const { mode: accountMode, modeLocked, setMode: setAccountMode, setModeLocked } = useMode()
   const failedRef = useRef<HTMLElement>(null)
+
+  // Konfirmasi ganti mode akun
+  const [pendingMode, setPendingMode] = useState<'lengkap' | 'investasi' | null>(null)
 
   useEffect(() => {
     if (focusFailed && failedOps.length > 0) {
@@ -497,6 +502,95 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                 </div>
               </div>
             </div>
+          </Section>
+        </div>
+
+        {/* ── Mode Akun ────────────────────────────────── */}
+        <div className="card" style={{ padding: 24 }}>
+          <Section title="Mode Akun">
+            <p className="muted" style={{ fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+              Mode Lengkap menampilkan semua fitur: transaksi, rutin, laporan, dan investasi.
+              Mode Investasi menyembunyikan fitur transaksi dan laporan agar tampilan lebih fokus.
+            </p>
+            <div
+              role="radiogroup"
+              aria-label="Mode akun"
+              style={{
+                display: 'flex',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              {([
+                { value: 'lengkap' as const, label: 'Lengkap', desc: 'Semua fitur aktif', Icon: LayoutDashboard },
+                { value: 'investasi' as const, label: 'Investasi', desc: 'Hanya fitur investasi', Icon: TrendingUp },
+              ] as const).map(({ value, label, desc, Icon }) => {
+                const active = accountMode === value
+                return (
+                  <button
+                    key={value}
+                    role="radio"
+                    aria-checked={active}
+                    disabled={modeLocked}
+                    onClick={() => {
+                      if (active) return
+                      if (value === 'investasi') {
+                        setPendingMode('investasi')
+                      } else {
+                        setAccountMode('lengkap')
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '12px 16px',
+                      borderRadius: 'var(--radius-md)',
+                      border: `2px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+                      background: 'var(--surface)',
+                      cursor: modeLocked ? 'default' : 'pointer',
+                      minHeight: 44,
+                      textAlign: 'left' as const,
+                      transition: 'border-color 150ms ease-out',
+                      opacity: modeLocked ? 0.6 : 1,
+                      flex: '1 1 140px',
+                      minWidth: 0,
+                    }}
+                  >
+                    <Icon size={18} style={{ flexShrink: 0, color: active ? 'var(--primary)' : 'var(--text-3)' }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{label}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{desc}</div>
+                    </div>
+                    {active && (
+                      <div
+                        style={{
+                          marginLeft: 'auto',
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          background: 'var(--primary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--primary-fg)',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        ✓
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {modeLocked && (
+              <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                Mode dikunci oleh admin. Hubungi admin untuk mengubahnya.
+              </p>
+            )}
           </Section>
         </div>
 
@@ -1089,6 +1183,16 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
         confirmLabel="Mengerti"
         onConfirm={() => setBlockedAsset(null)}
         onCancel={() => setBlockedAsset(null)}
+      />
+
+      {/* ── Konfirmasi ganti ke mode investasi ───────── */}
+      <ConfirmDialog
+        open={pendingMode === 'investasi'}
+        title="Ganti ke Mode Investasi?"
+        message="Tab Transaksi dan Laporan akan disembunyikan. Data tidak akan terhapus dan bisa diakses kembali dengan mengganti mode ke Lengkap."
+        confirmLabel="Ganti Mode"
+        onConfirm={() => { setAccountMode('investasi'); setPendingMode(null) }}
+        onCancel={() => setPendingMode(null)}
       />
 
       {/* ── Edit Kontributor ─────────────────────────── */}
