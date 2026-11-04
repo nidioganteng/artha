@@ -193,7 +193,7 @@ export default function Report({ goto }: { goto?: (tab: string) => void }) {
           onClick={() => goto ? goto('home') : (window.location.hash = 'home')}
           style={{
             flex: 1,
-            minHeight: 40,
+            minHeight: 44,
             padding: '0 16px',
             borderRadius: 'calc(var(--radius-md) - 2px)',
             border: 'none',
@@ -211,7 +211,7 @@ export default function Report({ goto }: { goto?: (tab: string) => void }) {
           aria-current="page"
           style={{
             flex: 1,
-            minHeight: 40,
+            minHeight: 44,
             padding: '0 16px',
             borderRadius: 'calc(var(--radius-md) - 2px)',
             border: 'none',
@@ -263,7 +263,7 @@ export default function Report({ goto }: { goto?: (tab: string) => void }) {
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             className="btn-ghost"
             aria-label="Bulan sebelumnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 12px' }}
           >
             <ChevronLeft size={16} />
           </button>
@@ -285,7 +285,7 @@ export default function Report({ goto }: { goto?: (tab: string) => void }) {
             className="btn-ghost"
             aria-label="Bulan berikutnya"
             disabled={isCurrentMonth}
-            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 12px' }}
           >
             <ChevronRight size={16} />
           </button>

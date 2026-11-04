@@ -196,7 +196,7 @@ export default function Recurring() {
             className="btn-ghost"
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             aria-label="Bulan sebelumnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 12px' }}
           >
             <ChevronLeft size={16} />
           </button>
@@ -217,7 +217,7 @@ export default function Recurring() {
             onClick={() => setMonth((m) => shiftMonth(m, 1))}
             disabled={isCurrentMonth}
             aria-label="Bulan berikutnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 12px' }}
           >
             <ChevronRight size={16} />
           </button>

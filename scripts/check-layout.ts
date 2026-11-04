@@ -819,6 +819,160 @@ async function runPlaywright() {
       }
     }
 
+    // ── WAJIB LOLOS: Tidak ada scroll horizontal di semua halaman ──────────────
+    for (const w of [360, 390, 768, 820, 1024, 1440]) {
+      for (const tab of ['home', 'tx', 'inv', 'rec', 'set', 'lap']) {
+        const p = await browser.newPage()
+        await p.setViewportSize({ width: w, height: 700 })
+        await p.goto(`${BASE}/#${tab}`)
+        await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+        await p.waitForTimeout(400)
+
+        const r = await p.evaluate(`(function(vw) {
+          var sw = document.documentElement.scrollWidth;
+          return { ok: sw <= vw + 1, scrollW: sw };
+        })(${w})`) as { ok: boolean; scrollW: number }
+
+        check(`WAJIB: tidak ada scroll horizontal #${tab} di ${w}px`, r.ok,
+          `scrollWidth=${r.scrollW} > ${w}`)
+        await p.close()
+      }
+    }
+
+    // ── WAJIB LOLOS: Tidak ada elemen right > lebar viewport ───────────────────
+    for (const w of [360, 390]) {
+      for (const tab of ['home', 'tx', 'inv', 'rec', 'set']) {
+        const p = await browser.newPage()
+        await p.setViewportSize({ width: w, height: 700 })
+        await p.goto(`${BASE}/#${tab}`)
+        await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+        await p.waitForTimeout(400)
+
+        const r = await p.evaluate(`(function(vw) {
+          var overflow = [];
+          var all = Array.from(document.querySelectorAll('body *'));
+          for (var i = 0; i < all.length; i++) {
+            var el = all[i];
+            var style = window.getComputedStyle(el);
+            // Skip hidden, absolute/fixed (menu), overflow:scroll/auto containers
+            if (style.display === 'none' || style.visibility === 'hidden') continue;
+            if (style.position === 'fixed' || style.position === 'absolute') continue;
+            var ovX = style.overflowX;
+            if (ovX === 'scroll' || ovX === 'auto') continue;
+            var rect = el.getBoundingClientRect();
+            if (rect.right > vw + 2 && rect.width > 0 && rect.height > 0) {
+              overflow.push(el.tagName + '.' + (el.className||'').toString().slice(0,30) + ' right=' + Math.round(rect.right));
+            }
+          }
+          return { ok: overflow.length === 0, detail: overflow.slice(0, 3).join(' | ') };
+        })(${w})`) as { ok: boolean; detail: string }
+
+        check(`WAJIB: tidak ada elemen right > ${w}px di #${tab}`, r.ok, r.detail)
+        await p.close()
+      }
+    }
+
+    // ── WAJIB LOLOS: Semua elemen interaktif minimal 44×44px di <1024px ────────
+    for (const w of [360, 390]) {
+      for (const tab of ['home', 'tx', 'inv', 'rec', 'set']) {
+        const p = await browser.newPage()
+        await p.setViewportSize({ width: w, height: 700 })
+        await p.goto(`${BASE}/#${tab}`)
+        await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+        await p.waitForTimeout(400)
+
+        const r = await p.evaluate(`(function() {
+          var small = [];
+          var sel = 'button:not([disabled]), a[href], input, select, [role="checkbox"], [role="tab"]';
+          var els = Array.from(document.querySelectorAll(sel));
+          for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            // Skip link: elemen aksesibilitas keyboard saja, bukan target sentuh
+            if (el.classList.contains('skip-link')) continue;
+            var style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') continue;
+            // Skip elemen di dalam dialog tertutup
+            var dlg = el.closest('dialog');
+            if (dlg && !dlg.hasAttribute('open')) continue;
+            var rect = el.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) continue;
+            if (rect.width < 43 || rect.height < 43) {
+              small.push(el.tagName + '[' + (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0,20) + '] ' + Math.round(rect.width) + 'x' + Math.round(rect.height));
+            }
+          }
+          return { ok: small.length === 0, count: small.length, detail: small.slice(0, 5).join(' | ') };
+        })()`) as { ok: boolean; count: number; detail: string }
+
+        check(`WAJIB: elemen interaktif >=44px di #${tab} ${w}px (${r.count} pelanggaran)`, r.ok, r.detail)
+        await p.close()
+      }
+    }
+
+    // ── WAJIB LOLOS: Tidak ada teks terpotong (ellipsis overflow) di 360/390px ─
+    for (const w of [360, 390]) {
+      for (const tab of ['home', 'tx', 'inv', 'rec', 'set']) {
+        const p = await browser.newPage()
+        await p.setViewportSize({ width: w, height: 700 })
+        await p.goto(`${BASE}/#${tab}`)
+        await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+        await p.waitForTimeout(400)
+
+        const r = await p.evaluate(`(function() {
+          var clipped = [];
+          // Angka dan label penting: elemen dengan font-family mono (angka) atau teks pendek bukan nav
+          var candidates = Array.from(document.querySelectorAll('[style*="text-overflow"], .num-lg, .num-hero, .num-md'));
+          for (var i = 0; i < candidates.length; i++) {
+            var el = candidates[i];
+            var style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') continue;
+            if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {
+              clipped.push('"' + (el.textContent||'').trim().slice(0,20) + '" scrollW=' + el.scrollWidth + ' clientW=' + el.clientWidth);
+            }
+          }
+          return { ok: clipped.length === 0, detail: clipped.slice(0, 3).join(' | ') };
+        })()`) as { ok: boolean; detail: string }
+
+        check(`WAJIB: tidak ada teks terpotong di #${tab} ${w}px`, r.ok, r.detail)
+        await p.close()
+      }
+    }
+
+    // ── WAJIB LOLOS: Tidak ada font-size < 12px (sumbu grafik dan tab bar 11px OK) ─
+    for (const w of [390, 1440]) {
+      for (const tab of ['home', 'tx', 'inv', 'rec', 'set']) {
+        const p = await browser.newPage()
+        await p.setViewportSize({ width: w, height: 700 })
+        await p.goto(`${BASE}/#${tab}`)
+        await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+        await p.waitForTimeout(400)
+
+        const r = await p.evaluate(`(function() {
+          var small = [];
+          // Ambil semua elemen non-SVG yang terlihat
+          var els = Array.from(document.querySelectorAll('body *:not(svg):not(svg *)'));
+          for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            var style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') continue;
+            if (el.children.length > 0) continue; // hanya leaf node
+            var fs = parseFloat(style.fontSize);
+            // Izinkan 11px untuk anak [aria-label="Navigasi bawah"] (tab bar) dan kartu chart
+            if (fs < 11.5) {
+              var inTabBar = !!el.closest('[aria-label="Navigasi bawah"]');
+              var inChart = !!el.closest('[data-testid="investment-chart"], [data-testid="card-bar"]');
+              if (!inTabBar && !inChart) {
+                small.push('"' + (el.textContent||'').trim().slice(0,20) + '" fs=' + Math.round(fs) + ' tag=' + el.tagName.toLowerCase());
+              }
+            }
+          }
+          return { ok: small.length === 0, count: small.length, detail: small.slice(0, 5).join(' | ') };
+        })()`) as { ok: boolean; count: number; detail: string }
+
+        check(`WAJIB: tidak ada font < 12px di #${tab} ${w}px (${r.count} pelanggaran)`, r.ok, r.detail)
+        await p.close()
+      }
+    }
+
     // Tangkapan layar
     mkdirSync(QA_DIR, { recursive: true })
     console.log(`\n  Mengambil tangkapan layar ke docs/qa/verify/...`)

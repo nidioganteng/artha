@@ -65,7 +65,7 @@ function ModeToggle() {
   return (
     <button
       className="btn-ghost"
-      style={{ padding: 8, minHeight: 40, minWidth: 40, border: 'none' }}
+      style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none' }}
       onClick={() => setMode(next)}
       aria-label={label}
       title={label}

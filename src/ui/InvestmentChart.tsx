@@ -472,6 +472,7 @@ export function InvestmentChart({
                 onClick={() => setPeriod(p)}
                 style={{
                   minHeight: 44,
+                  minWidth: 44,
                   padding: '3px 12px',
                   fontSize: 13,
                   fontWeight: 600,

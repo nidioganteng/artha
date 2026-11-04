@@ -414,7 +414,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                               alignItems: 'center',
                               justifyContent: 'center',
                               color: 'var(--primary-fg)',
-                              fontSize: 11,
+                              fontSize: 12,
                               fontWeight: 700,
                               flexShrink: 0,
                             }}

@@ -569,7 +569,7 @@ function InvestmentSummary({
         <button
           className="btn-ghost"
           onClick={() => goto('inv')}
-          style={{ padding: '6px 12px', minHeight: 36, fontSize: 13 }}
+          style={{ padding: '6px 12px', minHeight: 44, fontSize: 13 }}
         >
           Detail
         </button>
@@ -653,7 +653,7 @@ function RecentTx({ goto }: { goto: (tab: string) => void }) {
         <button
           className="btn-ghost"
           onClick={() => goto('tx')}
-          style={{ padding: '6px 12px', minHeight: 36, fontSize: 13 }}
+          style={{ padding: '6px 12px', minHeight: 44, fontSize: 13 }}
         >
           Lihat semua
         </button>
@@ -753,7 +753,7 @@ function RecurringDue({ month, goto }: { month: string; goto: (tab: string) => v
         <button
           className="btn-ghost"
           onClick={() => goto('rec')}
-          style={{ padding: '6px 12px', minHeight: 36, fontSize: 13 }}
+          style={{ padding: '6px 12px', minHeight: 44, fontSize: 13 }}
         >
           Buka
         </button>
@@ -845,7 +845,7 @@ function BalanceCard({ goto }: { goto: (tab: string) => void }) {
           onClick={() => {
             window.location.hash = 'lap'
           }}
-          style={{ padding: '6px 12px', minHeight: 36, fontSize: 13 }}
+          style={{ padding: '6px 12px', minHeight: 44, fontSize: 13 }}
         >
           Lihat laporan
         </button>
@@ -1042,7 +1042,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
           aria-current="page"
           style={{
             flex: 1,
-            minHeight: 40,
+            minHeight: 44,
             padding: '0 16px',
             borderRadius: 'calc(var(--radius-md) - 2px)',
             border: 'none',
@@ -1061,7 +1061,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
           onClick={() => goto('lap')}
           style={{
             flex: 1,
-            minHeight: 40,
+            minHeight: 44,
             padding: '0 16px',
             borderRadius: 'calc(var(--radius-md) - 2px)',
             border: 'none',
@@ -1110,7 +1110,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             className="btn-ghost"
             aria-label="Bulan sebelumnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 40, padding: '0 10px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 10px' }}
           >
             <ChevronLeft size={16} />
           </button>
@@ -1132,7 +1132,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
             className="btn-ghost"
             aria-label="Bulan berikutnya"
             disabled={isCurrentMonth}
-            style={{ border: 'none', borderRadius: 0, minHeight: 40, padding: '0 10px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 10px' }}
           >
             <ChevronRight size={16} />
           </button>
@@ -1229,7 +1229,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
                 <button
                   className="btn-ghost"
                   onClick={() => { window.location.hash = 'lap' }}
-                  style={{ marginTop: 8, padding: '4px 0', fontSize: 12, alignSelf: 'flex-start', minHeight: 'unset' }}
+                  style={{ marginTop: 8, padding: '4px 0', fontSize: 12, alignSelf: 'flex-start', minHeight: 44 }}
                 >
                   Lihat semua ({m.cats.length} kategori)
                 </button>
