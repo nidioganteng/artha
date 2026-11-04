@@ -181,15 +181,22 @@ export default function Login() {
         @media (prefers-reduced-motion: reduce) {
           [data-floatcard] { animation: none !important; }
         }
+        /* Sembunyikan adegan 3D di layar sempit agar tidak menimpa kartu form */
+        @media (max-width: 899px) {
+          .login-scene { display: none !important; }
+        }
       `}</style>
 
       {/* Latar layar penuh + adegan 3D */}
       <div
         ref={sceneRef}
         data-save-data={saveData || undefined}
+        aria-hidden="true"
         style={{ position: 'fixed', inset: 0, background: 'var(--bg)', overflow: 'hidden' }}
       >
-        <LoginScene tiltX={tilt.x} tiltY={tilt.y} reduced={!!reduced || saveData} />
+        <div className="login-scene" style={{ position: 'absolute', inset: 0 }}>
+          <LoginScene tiltX={tilt.x} tiltY={tilt.y} reduced={!!reduced || saveData} />
+        </div>
       </div>
 
       {/* Tombol tema di pojok kanan atas */}
@@ -213,7 +220,7 @@ export default function Login() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '80px 24px 32px',
+          padding: 'max(60px, calc(env(safe-area-inset-top) + 20px)) 16px max(24px, env(safe-area-inset-bottom))',
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
         }}
@@ -290,6 +297,10 @@ export default function Login() {
             <div
               role="tablist"
               aria-label="Mode masuk atau daftar"
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft') { setMode('login'); setMsg(null) }
+                else if (e.key === 'ArrowRight') { setMode('signup'); setMsg(null) }
+              }}
               style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
@@ -335,7 +346,8 @@ export default function Login() {
                 <input
                   id="login-email"
                   type="email"
-                  autoComplete="email"
+                  autoComplete={mode === 'login' ? 'username' : 'email'}
+                  name={mode === 'login' ? 'username' : 'email'}
                   inputMode="email"
                   required
                   className="input"
@@ -384,19 +396,25 @@ export default function Login() {
                 </div>
               </div>
 
-              {/* Area pesan — tinggi dicadangkan agar layout tidak melompat */}
-              <div
-                role={msg ? 'alert' : undefined}
-                aria-live="polite"
-                style={{
-                  minHeight: 40,
-                  fontSize: 13,
-                  color: msg?.type === 'error' ? 'var(--expense)' : 'var(--income)',
-                  lineHeight: 1.45,
-                }}
-              >
-                {msg?.text ?? ''}
-              </div>
+              {/* Area pesan inline — hanya muncul saat ada pesan */}
+              {msg && (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  style={{
+                    fontSize: 13,
+                    color: msg.type === 'error' ? 'var(--expense)' : 'var(--income)',
+                    lineHeight: 1.45,
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: msg.type === 'error'
+                      ? 'color-mix(in srgb, var(--expense) 10%, transparent)'
+                      : 'color-mix(in srgb, var(--income) 10%, transparent)',
+                  }}
+                >
+                  {msg.text}
+                </div>
+              )}
 
               <button
                 type="submit"
