@@ -134,6 +134,39 @@ npm run check:contrast  # Kontras WCAG AA
 npm run check:layout    # Layout shell + browser (butuh Playwright)
 ```
 
+## Data Demo untuk Pengujian
+
+Script `seed-demo.ts` mengisi akun Supabase **terpisah** dengan data fiktif selama 12 bulan (pemasukan, pengeluaran, investasi DCA BTC dan Emas, aturan rutin, snapshot harga). **Semua angka dan harga adalah data fiktif, bukan data pasar sungguhan.**
+
+### Persiapan
+
+1. Buat akun Supabase baru **khusus pengujian** (jangan pakai akun pribadi yang berisi data asli).
+2. Daftarkan satu user di akun itu lewat Artha, lalu logout.
+3. Tambahkan variabel ke `.env.local`:
+
+```
+ARTHA_SEED_EMAIL=akun-demo@contoh.com
+ARTHA_SEED_PASSWORD=kata-sandi-akun-demo
+```
+
+### Perintah
+
+```bash
+npm run seed:demo -- --dry-run         # pratinjau rencana tanpa menulis
+npm run seed:demo -- --yes             # tulis data demo
+npm run seed:demo -- --yes --reset     # hapus data demo lama lalu tulis ulang
+```
+
+Script berhenti otomatis jika menemukan data non-demo di akun (pengaman agar data asli tidak tercemar). Gunakan `--force-i-know` hanya jika yakin akun kosong.
+
+### Membersihkan
+
+```bash
+npm run seed:demo -- --yes --reset     # hapus hanya baris demo
+```
+
+Atau hapus seluruh user demo lewat Supabase Dashboard > Authentication > Users.
+
 ## Roadmap
 
 - [ ] Grafik tren portofolio (nilai dan modal dari waktu ke waktu)
