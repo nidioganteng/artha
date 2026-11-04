@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { m, useReducedMotion } from 'motion/react'
-import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { usePortfolio } from '../lib/usePortfolio'
 import { useMode } from '../lib/useMode'
-import { contributorShares } from '../lib/calc'
-import { formatPercent, idr, monthKey, monthLabel, shiftMonth, todayISO, dateLabel } from '../lib/format'
+import { contributorShares, periodRange, barChartMonths } from '../lib/calc'
+import { formatPercent, idr, monthKey, monthLabel, todayISO, dateLabel } from '../lib/format'
 import { formatShort } from '../lib/amount'
-import { accountBalance, monthReport, unassignedTrades } from '../lib/ledger'
+import { accountBalance, unassignedTrades } from '../lib/ledger'
 import { useContainerWidth } from '../lib/useContainerWidth'
+import { loadDashPeriod, saveDashPeriod, periodSummaryLabel } from '../lib/period'
+import type { DashPeriod } from '../lib/period'
+import { PeriodPicker } from '../ui/PeriodPicker'
 
 // ──────────────────────────────────────────────────────
 // Hook: count-up
@@ -151,9 +154,9 @@ function DonutChart({ cats }: { cats: [string, number][] }) {
 }
 
 // ──────────────────────────────────────────────────────
-// Bar Chart — income vs expense, 6 months (full-width)
+// Bar Chart — income vs expense per period (full-width)
 // ──────────────────────────────────────────────────────
-function BarChart({ data }: { data: { month: string; income: number; expense: number }[] }) {
+function BarChart({ data, capped }: { data: { month: string; income: number; expense: number }[]; capped?: boolean }) {
   const [tip, setTip] = useState<{ px: number; py: number; text: string } | null>(null)
   const divRef = useRef<HTMLDivElement | null>(null)
   const [W, widthRef] = useContainerWidth()
@@ -184,16 +187,21 @@ function BarChart({ data }: { data: { month: string; income: number; expense: nu
           <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--expense)', display: 'inline-block', flexShrink: 0 }} />
           Pengeluaran
         </span>
+        {capped && (
+          <span style={{ marginLeft: 'auto', fontStyle: 'italic' }}>
+            menampilkan 12 bulan terakhir
+          </span>
+        )}
       </div>
 
-      {W > 0 && (
+      {W > 0 && data.length > 0 && (
         <svg
           viewBox={`0 0 ${W} ${H}`}
           width={W}
           height={H}
           style={{ display: 'block', width: '100%' }}
           role="img"
-          aria-label="Grafik pemasukan dan pengeluaran 6 bulan terakhir"
+          aria-label="Grafik pemasukan dan pengeluaran"
           onPointerLeave={() => setTip(null)}
         >
           <title>Pemasukan vs pengeluaran</title>
@@ -489,8 +497,11 @@ function PortfolioStack({
             )}
           </div>
 
-          <div className="num-hero" style={{ marginBottom: 16 }}>
+          <div className="num-hero" style={{ marginBottom: 4 }}>
             {formatShort(totalValue)}
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+            per hari ini
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
@@ -633,16 +644,16 @@ function InvestmentSummary({
 }
 
 // ──────────────────────────────────────────────────────
-// Recent Transactions
+// Recent Transactions (period-aware)
 // ──────────────────────────────────────────────────────
-function RecentTx({ goto }: { goto: (tab: string) => void }) {
+function RecentTx({ transactions, goto }: { transactions: ReturnType<typeof useStore>['db']['transactions']; goto: (tab: string) => void }) {
   const { db } = useStore()
   const recent = useMemo(
     () =>
-      [...db.transactions]
+      [...transactions]
         .sort((a, b) => b.occurred_on.localeCompare(a.occurred_on))
-        .slice(0, 6),
-    [db.transactions],
+        .slice(0, 5),
+    [transactions],
   )
 
   return (
@@ -814,19 +825,19 @@ function RecurringDue({ month, goto }: { month: string; goto: (tab: string) => v
 // ──────────────────────────────────────────────────────
 // Balance Card — total saldo rekening + peringatan trade belum ditentukan
 // ──────────────────────────────────────────────────────
-function BalanceCard({ goto }: { goto: (tab: string) => void }) {
+function BalanceCard({ asOf, goto }: { asOf: string; goto: (tab: string) => void }) {
   const { db } = useStore()
 
   const { total, perAccount, unassigned } = useMemo(() => {
     const perAccount = db.accounts.map((a) => ({
       id: a.id,
       name: a.name,
-      balance: accountBalance(a, db.transactions, db.trades),
+      balance: accountBalance(a, db.transactions, db.trades, asOf),
     }))
     const total = perAccount.reduce((s, a) => s + a.balance, 0)
     const unassigned = unassignedTrades(db.trades)
     return { total, perAccount, unassigned }
-  }, [db.accounts, db.transactions, db.trades])
+  }, [db.accounts, db.transactions, db.trades, asOf])
 
   const topAccounts = [...perAccount].sort((a, b) => b.balance - a.balance).slice(0, 3)
 
@@ -859,6 +870,9 @@ function BalanceCard({ goto }: { goto: (tab: string) => void }) {
             <div className="muted" style={{ fontSize: 12 }}>Total saldo</div>
             <div className="num-lg" style={{ color: 'var(--text-1)', marginTop: 2 }}>
               {formatShort(total)}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+              per {dateLabel(asOf)}
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
@@ -940,47 +954,63 @@ function BalanceCard({ goto }: { goto: (tab: string) => void }) {
 // Dashboard
 // ──────────────────────────────────────────────────────
 export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
-  const { db, ready } = useStore()
+  const { db } = useStore()
   const { rows, total, at, live } = usePortfolio()
   const { mode: accountMode } = useMode()
-  const [month, setMonth] = useState(() => monthKey(todayISO()))
-  const monthDefaultSet = useRef(false)
 
-  useEffect(() => {
-    if (!ready || monthDefaultSet.current) return
-    monthDefaultSet.current = true
-    const today = monthKey(todayISO())
-    const txMonths = db.transactions.map((t) => monthKey(t.occurred_on))
-    if (txMonths.length === 0) return
-    const last = txMonths.reduce((a, b) => (a > b ? a : b))
-    if (last <= today) setMonth(last)
-  }, [ready, db.transactions])
+  // Period state
+  const [period, setPeriod] = useState<DashPeriod>(loadDashPeriod)
 
-  const m = useMemo(() => {
-    const report = monthReport(month, db.accounts, db.categories, db.transactions, db.trades)
+  const handlePeriodChange = useCallback((p: DashPeriod) => {
+    setPeriod(p)
+    saveDashPeriod(p)
+  }, [])
+
+  // firstDate: earliest occurred_on from transactions, null if none
+  const firstDate = useMemo(() => {
+    if (db.transactions.length === 0) return null
+    return db.transactions.reduce((min, t) => t.occurred_on < min ? t.occurred_on : min, db.transactions[0].occurred_on)
+  }, [db.transactions])
+
+  // Compute period range
+  const range = useMemo(
+    () => periodRange(period.kind, period.custom, todayISO(), firstDate),
+    [period, firstDate],
+  )
+
+  // Filter transactions and trades to period
+  const periodTx = useMemo(
+    () => db.transactions.filter((t) => t.occurred_on >= range.from && t.occurred_on <= range.to),
+    [db.transactions, range],
+  )
+
+  const periodTrades = useMemo(
+    () => db.trades.filter((t) => t.traded_on >= range.from && t.traded_on <= range.to),
+    [db.trades, range],
+  )
+
+  // KPI computations from period data
+  const kpi = useMemo(() => {
+    const income = periodTx.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0)
+    const expense = periodTx.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0)
+    const invest = periodTrades.filter((t) => t.side === 'buy').reduce((s, t) => s + t.quantity * t.price_per_unit + t.fee, 0)
+    const left = income - expense - invest
 
     const byCat = new Map<string, number>()
-    for (const t of db.transactions.filter(
-      (x) => x.kind === 'expense' && x.occurred_on.startsWith(month),
-    )) {
+    for (const t of periodTx.filter((x) => x.kind === 'expense')) {
       const name = db.categories.find((c) => c.id === t.category_id)?.name ?? 'Tanpa kategori'
       byCat.set(name, (byCat.get(name) ?? 0) + t.amount)
     }
     const cats = [...byCat.entries()].sort((a, b) => b[1] - a[1]) as [string, number][]
 
-    return {
-      income: report.income,
-      expense: report.expense,
-      invest: report.investBuy,
-      left: report.net,
-      cats,
-    }
-  }, [db, month])
+    return { income, expense, invest, left, cats }
+  }, [periodTx, periodTrades, db.categories])
 
+  // BarChart data: months in period (capped at 12)
+  const barResult = useMemo(() => barChartMonths(range.from, range.to, 12), [range])
   const barData = useMemo(
     () =>
-      Array.from({ length: 6 }, (_, i) => {
-        const mk = shiftMonth(month, i - 5)
+      barResult.months.map((mk) => {
         const tx = db.transactions.filter((t) => t.occurred_on.startsWith(mk))
         return {
           month: mk,
@@ -988,7 +1018,7 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
           expense: tx.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0),
         }
       }),
-    [db.transactions, month],
+    [db.transactions, barResult.months],
   )
 
   const contribShares = useMemo(
@@ -1029,7 +1059,32 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
       .sort((a, b) => b.value - a.value)
   }, [rows, db.platforms])
 
-  const isCurrentMonth = month === monthKey(todayISO())
+  // asOf for BalanceCard: end of period or today, whichever is earlier
+  const balanceAsOf = useMemo(() => {
+    const today = todayISO()
+    return range.to > today ? today : range.to
+  }, [range.to])
+
+  // Months with data (for PeriodPicker dots)
+  const monthsWithData = useMemo(
+    () => new Set([
+      ...db.transactions.map((t) => t.occurred_on.slice(0, 7)),
+      ...db.trades.map((t) => t.traded_on.slice(0, 7)),
+    ]),
+    [db.transactions, db.trades],
+  )
+
+  // Summary label for PeriodPicker
+  const summaryLabel = useMemo(
+    () => periodSummaryLabel(period.kind, range.from, range.to, firstDate),
+    [period.kind, range.from, range.to, firstDate],
+  )
+
+  // Current month for RecurringDue (always current month, not period-dependent)
+  const currentMonth = monthKey(todayISO())
+
+  // Empty state check: no data in period
+  const periodEmpty = periodTx.length === 0 && periodTrades.length === 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
@@ -1084,67 +1139,54 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
         </button>
       </div>}
 
-      {/* Month selector */}
-      <div
+      {/* Page header */}
+      <h1
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
+          fontWeight: 700,
+          fontSize: 22,
+          color: 'var(--text-1)',
+          letterSpacing: '-0.02em',
         }}
       >
-        <h1
-          style={{
-            fontWeight: 700,
-            fontSize: 22,
-            color: 'var(--text-1)',
-            letterSpacing: '-0.02em',
-          }}
-        >
-          Ringkasan
-        </h1>
+        Ringkasan
+      </h1>
+
+      {/* Period picker — only shown in lengkap mode */}
+      {accountMode === 'lengkap' && (
+        <PeriodPicker
+          period={period}
+          onChange={handlePeriodChange}
+          monthsWithData={monthsWithData}
+          summaryLabel={summaryLabel}
+          data-testid="period-picker"
+        />
+      )}
+
+      {/* Empty state for period */}
+      {accountMode === 'lengkap' && periodEmpty && (
         <div
+          className="card"
           style={{
+            padding: 32,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-            overflow: 'hidden',
+            gap: 12,
+            textAlign: 'center',
           }}
         >
+          <p className="muted" style={{ fontSize: 14 }}>
+            Belum ada catatan di periode ini
+          </p>
           <button
-            onClick={() => setMonth((m) => shiftMonth(m, -1))}
             className="btn-ghost"
-            aria-label="Bulan sebelumnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 10px' }}
+            onClick={() => handlePeriodChange({ kind: 'all', custom: null })}
+            style={{ minHeight: 44, padding: '0 20px' }}
           >
-            <ChevronLeft size={16} />
-          </button>
-          <span
-            style={{
-              padding: '0 4px',
-              fontSize: 13,
-              fontWeight: 500,
-              minWidth: 110,
-              textAlign: 'center',
-              color: 'var(--text-1)',
-              textTransform: 'capitalize',
-            }}
-          >
-            {monthLabel(month)}
-          </span>
-          <button
-            onClick={() => setMonth((m) => shiftMonth(m, 1))}
-            className="btn-ghost"
-            aria-label="Bulan berikutnya"
-            disabled={isCurrentMonth}
-            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 10px' }}
-          >
-            <ChevronRight size={16} />
+            Lihat Semua
           </button>
         </div>
-      </div>
+      )}
 
       {/* Bento — urutan DOM = urutan visual untuk screen reader dan Tab */}
       <div className="bento">
@@ -1163,34 +1205,34 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
 
         <InvestmentSummary total={total} goto={goto} className="hidden md:block" />
 
-        {/* 2. KPI bulan ini */}
-        {accountMode === 'lengkap' && <KpiCard label="Pemasukan" value={m.income} token="var(--income)" index={0} testId="kpi-pemasukan" />}
-        {accountMode === 'lengkap' && <KpiCard label="Pengeluaran" value={m.expense} token="var(--expense)" index={1} />}
-        <KpiCard label="Investasi (beli)" value={m.invest} token="var(--invest)" index={accountMode === 'lengkap' ? 2 : 0} />
+        {/* 2. KPI periode */}
+        {accountMode === 'lengkap' && <KpiCard label="Pemasukan" value={kpi.income} token="var(--income)" index={0} testId="kpi-pemasukan" />}
+        {accountMode === 'lengkap' && <KpiCard label="Pengeluaran" value={kpi.expense} token="var(--expense)" index={1} />}
+        <KpiCard label="Investasi (beli)" value={kpi.invest} token="var(--invest)" index={accountMode === 'lengkap' ? 2 : 0} />
         {accountMode === 'lengkap' && <KpiCard
-          label="Sisa bulan ini"
-          value={m.left}
-          token={m.left >= 0 ? 'var(--income)' : 'var(--expense)'}
+          label="Sisa periode"
+          value={kpi.left}
+          token={kpi.left >= 0 ? 'var(--income)' : 'var(--expense)'}
           sub="masuk - keluar - investasi"
           index={3}
         />}
 
         {/* 3. Baris 1 — dua kolom berdampingan di >= 1024px */}
-        {accountMode === 'lengkap' && <BalanceCard goto={goto} />}
+        {accountMode === 'lengkap' && <BalanceCard asOf={balanceAsOf} goto={goto} />}
 
         {/* Donut chart card */}
         {accountMode === 'lengkap' && <div className="card bento-pair" data-testid="card-donut" style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
           <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
             Pengeluaran per Kategori
           </h2>
-          {m.cats.length === 0 ? (
-            <p className="muted">Belum ada pengeluaran bulan ini.</p>
+          {kpi.cats.length === 0 ? (
+            <p className="muted">Belum ada pengeluaran di periode ini.</p>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-                <DonutChart cats={m.cats} />
+                <DonutChart cats={kpi.cats} />
                 <div style={{ flex: 1, minWidth: 90, overflow: 'hidden' }}>
-                  {m.cats.slice(0, 6).map(([name, v], i) => (
+                  {kpi.cats.slice(0, 6).map(([name, v], i) => (
                     <div
                       key={name}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}
@@ -1232,13 +1274,13 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
                   ))}
                 </div>
               </div>
-              {m.cats.length > 6 && (
+              {kpi.cats.length > 6 && (
                 <button
                   className="btn-ghost"
                   onClick={() => { window.location.hash = 'lap' }}
                   style={{ marginTop: 8, padding: '4px 0', fontSize: 12, alignSelf: 'flex-start', minHeight: 44 }}
                 >
-                  Lihat semua ({m.cats.length} kategori)
+                  Lihat semua ({kpi.cats.length} kategori)
                 </button>
               )}
             </>
@@ -1250,12 +1292,12 @@ export default function Dashboard({ goto }: { goto: (tab: string) => void }) {
           <h2 style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-1)', marginBottom: 12 }}>
             Pemasukan vs Pengeluaran
           </h2>
-          <BarChart data={barData} />
+          <BarChart data={barData} capped={barResult.capped} />
         </div>}
 
-        {accountMode === 'lengkap' && <RecentTx goto={goto} />}
+        {accountMode === 'lengkap' && <RecentTx transactions={periodTx} goto={goto} />}
 
-        {accountMode === 'lengkap' && <RecurringDue month={month} goto={goto} />}
+        {accountMode === 'lengkap' && <RecurringDue month={currentMonth} goto={goto} />}
 
         {/* Porsi Kontributor — tampil bila ada kontributor */}
         {contribShares.length > 0 && db.contributors.length > 0 && (
