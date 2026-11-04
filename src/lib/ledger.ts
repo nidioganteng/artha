@@ -44,7 +44,7 @@ function tradeSellProceeds(t: Trade): number {
 }
 
 /**
- * Saldo rekening pada tanggal upTo (inklusif) atau sampai sekarang.
+ * Saldo rekening pada tanggal asOf (inklusif) atau sampai sekarang.
  * Dimulai dari opening_balance, ditambah pemasukan, dikurangi pengeluaran,
  * dikurangi modal beli DCA (qty*price+fee), ditambah hasil jual (qty*price-fee).
  */
@@ -52,19 +52,19 @@ export function accountBalance(
   account: Account,
   transactions: Transaction[],
   trades: Trade[],
-  upTo?: string,
+  asOf?: string,
 ): number {
   let bal = account.opening_balance ?? 0
-  const includeTx = (iso: string) => (upTo ? iso <= upTo : true)
+  const include = (iso: string) => (asOf ? iso <= asOf : true)
   for (const t of transactions) {
     if (t.account_id !== account.id) continue
-    if (!includeTx(t.occurred_on)) continue
+    if (!include(t.occurred_on)) continue
     if (t.kind === 'income') bal += t.amount
     else bal -= t.amount
   }
   for (const t of trades) {
     if (t.account_id !== account.id) continue
-    if (!includeTx(t.traded_on)) continue
+    if (!include(t.traded_on)) continue
     if (t.side === 'buy') bal -= tradeBuyCost(t)
     else bal += tradeSellProceeds(t)
   }
