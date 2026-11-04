@@ -7,6 +7,21 @@ import type { Kind, Transaction } from '../lib/types'
 
 type Filter = Kind | 'all'
 
+function mostUsedCategoryId(
+  transactions: { kind: Kind; category_id: string | null }[],
+  categories: { id: string; kind: Kind }[],
+  kind: Kind,
+): string {
+  const counts = new Map<string, number>()
+  for (const tx of transactions.filter((t) => t.kind === kind && t.category_id)) {
+    const id = tx.category_id!
+    counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+  if (counts.size === 0) return ''
+  const topId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+  return categories.find((c) => c.id === topId)?.id ?? ''
+}
+
 export default function Transactions() {
   const { db, save, remove, failedIds } = useStore()
   const [month, setMonth] = useState(() => monthKey(todayISO()))
@@ -57,7 +72,7 @@ export default function Transactions() {
     setDate(todayISO())
     setAmountVal(null)
     setNote('')
-    setCategoryId('')
+    setCategoryId(mostUsedCategoryId(db.transactions, db.categories, 'expense'))
     setAccountId(db.accounts[0]?.id ?? '')
     setFormError('')
     setOpen(true)
@@ -156,7 +171,7 @@ export default function Transactions() {
             className="btn-ghost"
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             aria-label="Bulan sebelumnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 40, padding: '0 10px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
           >
             <ChevronLeft size={16} />
           </button>
@@ -177,7 +192,7 @@ export default function Transactions() {
             onClick={() => setMonth((m) => shiftMonth(m, 1))}
             disabled={isCurrentMonth}
             aria-label="Bulan berikutnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 40, padding: '0 10px' }}
+            style={{ border: 'none', borderRadius: 0, minHeight: 44, padding: '0 12px' }}
           >
             <ChevronRight size={16} />
           </button>
@@ -206,7 +221,7 @@ export default function Transactions() {
                 fontSize: 13,
                 fontWeight: 500,
                 cursor: 'pointer',
-                minHeight: 36,
+                minHeight: 44,
                 fontFamily: 'inherit',
                 transition: 'background 150ms ease-out, color 150ms ease-out',
               }}
@@ -230,20 +245,41 @@ export default function Transactions() {
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {grouped.map(([day, txs]) => (
+          {grouped.map(([day, txs]) => {
+            const dayInc = txs.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0)
+            const dayExp = txs.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0)
+            return (
             <div key={day}>
               <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: 'var(--text-3)',
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: 8,
                   marginBottom: 8,
                   paddingLeft: 4,
+                  paddingRight: 4,
                 }}
               >
-                {dateLabel(day)}
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--text-3)',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {dateLabel(day)}
+                </span>
+                <span style={{ display: 'flex', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                  {dayInc > 0 && (
+                    <span style={{ color: 'var(--income)' }}>+{idr(dayInc)}</span>
+                  )}
+                  {dayExp > 0 && (
+                    <span style={{ color: 'var(--expense)' }}>-{idr(dayExp)}</span>
+                  )}
+                </span>
               </div>
               <div
                 className="card"
@@ -261,7 +297,8 @@ export default function Transactions() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: 8,
-                        padding: '12px 16px',
+                        padding: '10px 16px',
+                        minHeight: 56,
                         borderTop: i > 0 ? '1px solid var(--border)' : 'none',
                         opacity: unsaved ? 0.6 : 1,
                       }}
@@ -343,7 +380,8 @@ export default function Transactions() {
                 })}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -369,7 +407,7 @@ export default function Transactions() {
                 <button
                   key={k}
                   type="button"
-                  onClick={() => { setKind(k); setCategoryId('') }}
+                  onClick={() => { setKind(k); setCategoryId(mostUsedCategoryId(db.transactions, db.categories, k)) }}
                   style={{
                     padding: '10px 16px',
                     borderRadius: 'var(--radius-md)',
@@ -391,7 +429,7 @@ export default function Transactions() {
           </div>
 
           <Field label="Nominal" htmlFor="tx-amt" error={formError}>
-            <MoneyInput id="tx-amt" value={amountVal} onValueChange={setAmountVal} />
+            <MoneyInput id="tx-amt" value={amountVal} onValueChange={setAmountVal} autoFocus />
           </Field>
 
           <Field label="Kategori" htmlFor="tx-cat">
