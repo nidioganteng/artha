@@ -446,7 +446,7 @@ export default function Login() {
               </button>
             </form>
 
-            <p style={{ marginTop: 16, fontSize: 11, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>
+            <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>
               Catatanmu tersimpan di perangkat dan akun pribadi. Hanya kamu yang dapat mengaksesnya.
             </p>
           </div>

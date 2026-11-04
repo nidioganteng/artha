@@ -263,7 +263,7 @@ export default function Transactions() {
               >
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: 600,
                     color: 'var(--text-3)',
                     letterSpacing: '0.06em',
@@ -335,7 +335,7 @@ export default function Transactions() {
                           {tx.note || cat || (isIncome ? 'Pemasukan' : 'Pengeluaran')}
                           {unsaved && (
                             <span
-                              style={{ marginLeft: 6, fontSize: 11, color: 'var(--warn)' }}
+                              style={{ marginLeft: 6, fontSize: 12, color: 'var(--warn)' }}
                             >
                               belum tersimpan
                             </span>

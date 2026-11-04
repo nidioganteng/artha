@@ -102,7 +102,7 @@ function KpiCard({
       <div className="num-lg" style={{ color: token, marginTop: 4 }} aria-label={idr(value)}>
         {formatShort(animated)}
       </div>
-      {sub && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{sub}</div>}
+      {sub && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{sub}</div>}
     </m.div>
   )
 }
@@ -468,12 +468,12 @@ function PortfolioStack({
                     aria-label={`Platform ${c.name}`}
                     aria-pressed={i === activeIdx}
                     style={{
-                      minHeight: 32,
+                      minHeight: 44,
                       padding: '4px 10px',
                       borderRadius: 'var(--radius-xl)',
                       border: 'none',
                       cursor: 'pointer',
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: i === activeIdx ? 700 : 400,
                       background: i === activeIdx ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
                       color: 'var(--primary-fg)',
@@ -494,25 +494,25 @@ function PortfolioStack({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
             <div>
-              <div style={{ fontSize: 11, opacity: 0.7 }}>Modal</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>Modal</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14 }}>
                 {formatShort(totalBought)}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, opacity: 0.7 }}>Untung / Rugi</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>Untung / Rugi</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14 }}>
                 {totalPL >= 0 ? '+' : ''}{formatShort(totalPL)}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, opacity: 0.7 }}>ROI</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>ROI</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14 }}>
                 {formatPercent(roi)}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, opacity: 0.7 }}>Harga</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>Harga</div>
               <div style={{ fontSize: 12, opacity: 0.85 }}>
                 {live ? 'Live' : 'Tersimpan'}
                 {at
@@ -528,7 +528,7 @@ function PortfolioStack({
                 <span
                   key={sym}
                   style={{
-                    fontSize: 11,
+                    fontSize: 12,
                     padding: '2px 8px',
                     borderRadius: 9999,
                     background: 'rgba(255,255,255,0.18)',

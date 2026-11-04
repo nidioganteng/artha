@@ -660,8 +660,8 @@ body {
   justify-content: flex-end;
   margin-top: 4px;
 }
-.confirm-btn-cancel { min-height: 40px; padding: 0 16px; }
-.confirm-btn-confirm { min-height: 40px; padding: 0 16px; }
+.confirm-btn-cancel { min-height: 44px; padding: 0 16px; }
+.confirm-btn-confirm { min-height: 44px; padding: 0 16px; }
 
 /* ──────────────────────────────────────────────────────
    PALETTE SWATCHES (Settings UI — hex di CSS diizinkan)

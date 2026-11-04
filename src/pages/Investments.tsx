@@ -43,7 +43,7 @@ function MetricCell({
         <div style={{ fontFamily: 'var(--font-mono)', ...valStyle }}>{value}</div>
       )}
       {hint && (
-        <div className="muted" style={{ fontSize: 11 }}>
+        <div className="muted" style={{ fontSize: 12 }}>
           {hint}
         </div>
       )}
@@ -362,7 +362,7 @@ export default function Investments() {
           <div className="card" style={{ marginBottom: 16 }}>
             <div
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 600,
                 color: 'var(--text-3)',
                 letterSpacing: '0.06em',
@@ -422,7 +422,7 @@ export default function Investments() {
                       ({a.symbol})
                     </span>
                   </div>
-                  <span className="muted" style={{ fontSize: 11 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>
                     {a.price_source === 'indodax' ? 'harga live' : 'harga manual'}
                   </span>
                 </div>
@@ -474,7 +474,7 @@ export default function Investments() {
                   </div>
                 )}
                 {a.price_source === 'manual' && a.manual_price_at && (
-                  <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                  <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
                     Harga terakhir diisi{' '}
                     {new Date(a.manual_price_at).toLocaleDateString('id-ID')}.
                   </p>
@@ -488,7 +488,7 @@ export default function Investments() {
             <div className="card" style={{ marginBottom: 16 }}>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: 'var(--text-3)',
                   letterSpacing: '0.06em',
@@ -648,7 +648,7 @@ export default function Investments() {
                       >
                         {isBuy ? 'Beli' : 'Jual'} {num(t.quantity)} {a?.symbol ?? a?.unit ?? ''}
                         {unsaved && (
-                          <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--warn)' }}>
+                          <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--warn)' }}>
                             belum tersimpan
                           </span>
                         )}
