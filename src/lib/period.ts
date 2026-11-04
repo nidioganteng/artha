@@ -8,12 +8,11 @@ export interface DashPeriod {
   custom: PeriodCustom | null
 }
 
-const LS_KEY = 'artha:dashPeriod'
 const YM_RE = /^\d{4}-\d{2}$/
 
-export function loadDashPeriod(): DashPeriod {
+export function loadPeriod(key: string): DashPeriod {
   try {
-    const raw = localStorage.getItem(LS_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return { kind: 'all', custom: null }
     const p = JSON.parse(raw) as Record<string, unknown>
     if (p.kind !== 'all' && p.kind !== 'month' && p.kind !== 'custom') return { kind: 'all', custom: null }
@@ -29,9 +28,12 @@ export function loadDashPeriod(): DashPeriod {
   }
 }
 
-export function saveDashPeriod(period: DashPeriod): void {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(period)) } catch { /* ignore */ }
+export function savePeriod(key: string, period: DashPeriod): void {
+  try { localStorage.setItem(key, JSON.stringify(period)) } catch { /* ignore */ }
 }
+
+export function loadDashPeriod(): DashPeriod { return loadPeriod('artha:dashPeriod') }
+export function saveDashPeriod(period: DashPeriod): void { savePeriod('artha:dashPeriod', period) }
 
 export function shortMonthYear(monthKey: string): string {
   const [y, m] = monthKey.split('-').map(Number)

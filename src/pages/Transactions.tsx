@@ -1,10 +1,15 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
-import { dateLabel, idr, monthKey, monthLabel, shiftMonth, todayISO } from '../lib/format'
+import { dateLabel, idr, todayISO } from '../lib/format'
+import { periodRange, barChartMonths } from '../lib/calc'
+import { loadPeriod, savePeriod, periodSummaryLabel, shortMonthYear, type DashPeriod } from '../lib/period'
 import { Sheet, EmptyState, Field, MoneyInput, ConfirmDialog } from '../ui'
+import { PeriodPicker } from '../ui/PeriodPicker'
 import type { Kind, Transaction } from '../lib/types'
 
+const TX_PERIOD_KEY = 'artha:txPeriod'
+const MONTH_ABB = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
 type Filter = Kind | 'all'
 
 function mostUsedCategoryId(
@@ -22,15 +27,132 @@ function mostUsedCategoryId(
   return categories.find((c) => c.id === topId)?.id ?? ''
 }
 
+// ── Line chart ────────────────────────────────────────────────────────────────
+
+interface ChartData { month: string; income: number; expense: number }
+
+function TxLineChart({ data, capped }: { data: ChartData[]; capped: boolean }) {
+  const W = 400
+  const H = 80
+  const n = data.length
+  const max = Math.max(...data.flatMap((d) => [d.income, d.expense]), 1)
+  const vs = { vectorEffect: 'non-scaling-stroke' as const }
+
+  const cx = (i: number) => (n <= 1 ? W / 2 : (i / (n - 1)) * W)
+  const cy = (v: number) => (1 - v / max) * H
+
+  const incomePoints = data.map((d, i) => `${cx(i).toFixed(1)},${cy(d.income).toFixed(1)}`).join(' ')
+  const expensePoints = data.map((d, i) => `${cx(i).toFixed(1)},${cy(d.expense).toFixed(1)}`).join(' ')
+  const incomeArea = `${cx(0).toFixed(1)},${H} ${incomePoints} ${cx(n - 1).toFixed(1)},${H}`
+  const expenseArea = `${cx(0).toFixed(1)},${H} ${expensePoints} ${cx(n - 1).toFixed(1)},${H}`
+
+  return (
+    <div className="card" style={{ padding: '14px 16px 12px', marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 10, alignItems: 'center' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-2)' }}>
+          <span style={{ width: 18, height: 2, background: 'var(--income)', borderRadius: 1, display: 'inline-block', flexShrink: 0 }} />
+          Masuk
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-2)' }}>
+          <span style={{ width: 18, height: 2, background: 'var(--expense)', borderRadius: 1, display: 'inline-block', flexShrink: 0 }} />
+          Keluar
+        </span>
+        {capped && <span className="muted" style={{ fontSize: 11, marginLeft: 'auto' }}>maks 12 bln</span>}
+      </div>
+
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="Grafik pemasukan dan pengeluaran"
+        style={{ width: '100%', height: H, display: 'block', overflow: 'visible' }}
+      >
+        {/* Grid */}
+        <line x1={0} y1={0} x2={W} y2={0} stroke="var(--border)" strokeWidth={1} {...vs} />
+        <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="var(--border)" strokeWidth={0.5} {...vs} />
+        <line x1={0} y1={H} x2={W} y2={H} stroke="var(--border)" strokeWidth={1} {...vs} />
+
+        {/* Area fills */}
+        <polygon points={incomeArea} fill="var(--income)" fillOpacity={0.08} stroke="none" />
+        <polygon points={expenseArea} fill="var(--expense)" fillOpacity={0.08} stroke="none" />
+
+        {/* Lines */}
+        {n > 1 && (
+          <>
+            <polyline points={incomePoints} fill="none" stroke="var(--income)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" {...vs} />
+            <polyline points={expensePoints} fill="none" stroke="var(--expense)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" {...vs} />
+          </>
+        )}
+
+        {/* Dots */}
+        {data.map((d, i) => (
+          <g key={d.month}>
+            <circle cx={cx(i)} cy={cy(d.income)} r={3} fill="var(--income)" stroke="var(--surface)" strokeWidth={1.5} {...vs}>
+              <title>Masuk {shortMonthYear(d.month)}: {idr(d.income)}</title>
+            </circle>
+            <circle cx={cx(i)} cy={cy(d.expense)} r={3} fill="var(--expense)" stroke="var(--surface)" strokeWidth={1.5} {...vs}>
+              <title>Keluar {shortMonthYear(d.month)}: {idr(d.expense)}</title>
+            </circle>
+          </g>
+        ))}
+      </svg>
+
+      {/* Month labels */}
+      <div style={{ display: 'flex', marginTop: 4 }}>
+        {data.map((d, i) => (
+          <div
+            key={d.month}
+            style={{
+              flex: 1,
+              fontSize: 10,
+              color: 'var(--text-3)',
+              textAlign: i === 0 ? 'left' : i === n - 1 ? 'right' : 'center',
+              ...(n > 8 && i > 0 && i < n - 1 && i % 2 === 1 ? { visibility: 'hidden' } : {}),
+            }}
+          >
+            {MONTH_ABB[parseInt(d.month.slice(5, 7)) - 1]}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function Transactions() {
   const { db, save, remove, failedIds } = useStore()
-  const [month, setMonth] = useState(() => monthKey(todayISO()))
+
+  // Period
+  const [period, setPeriod] = useState<DashPeriod>(() => loadPeriod(TX_PERIOD_KEY))
+
+  const firstDate = useMemo(() => {
+    const dates = db.transactions.map((t) => t.occurred_on)
+    return dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : todayISO()
+  }, [db.transactions])
+
+  const range = useMemo(
+    () => periodRange(period.kind, period.custom, todayISO(), firstDate),
+    [period, firstDate],
+  )
+
+  const summaryLabel = useMemo(
+    () => periodSummaryLabel(period.kind, range.from, range.to, firstDate),
+    [period.kind, range, firstDate],
+  )
+
+  const monthsWithData = useMemo(
+    () => new Set(db.transactions.map((t) => t.occurred_on.slice(0, 7))),
+    [db.transactions],
+  )
+
+  // Filter
   const [filter, setFilter] = useState<Filter>('all')
+
+  // Form state
   const [open, setOpen] = useState(false)
   const [editTx, setEditTx] = useState<Transaction | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
-
-  // Form state
   const [kind, setKind] = useState<Kind>('expense')
   const [amountVal, setAmountVal] = useState<number | null>(null)
   const [categoryId, setCategoryId] = useState('')
@@ -43,28 +165,55 @@ export default function Transactions() {
 
   const cats = db.categories.filter((c) => c.kind === kind)
 
+  // Period-filtered transactions
+  const periodTx = useMemo(
+    () => db.transactions.filter((t) => t.occurred_on >= range.from && t.occurred_on <= range.to),
+    [db.transactions, range],
+  )
+
+  // Bar chart data
+  const { months: chartMonths, capped: chartCapped } = useMemo(
+    () => barChartMonths(range.from, range.to),
+    [range],
+  )
+  const chartData = useMemo<ChartData[]>(
+    () =>
+      chartMonths.map((m) => ({
+        month: m,
+        income: periodTx
+          .filter((t) => t.kind === 'income' && t.occurred_on.startsWith(m))
+          .reduce((s, t) => s + t.amount, 0),
+        expense: periodTx
+          .filter((t) => t.kind === 'expense' && t.occurred_on.startsWith(m))
+          .reduce((s, t) => s + t.amount, 0),
+      })),
+    [periodTx, chartMonths],
+  )
+
+  // Table rows (sorted, filtered by kind)
   const list = useMemo(() => {
-    let txs = db.transactions.filter((t) => t.occurred_on.startsWith(month))
+    let txs = periodTx
     if (filter !== 'all') txs = txs.filter((t) => t.kind === filter)
-    return txs.sort((a, b) => b.occurred_on.localeCompare(a.occurred_on))
-  }, [db.transactions, month, filter])
+    return [...txs].sort((a, b) => b.occurred_on.localeCompare(a.occurred_on))
+  }, [periodTx, filter])
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, typeof list>()
-    for (const tx of list) {
-      if (!map.has(tx.occurred_on)) map.set(tx.occurred_on, [])
-      map.get(tx.occurred_on)!.push(tx)
-    }
-    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]))
-  }, [list])
+  // Totals for footer (from filtered list)
+  const totals = useMemo(
+    () => ({
+      income: list.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0),
+      expense: list.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0),
+    }),
+    [list],
+  )
 
-  const { income, expense } = useMemo(() => {
-    const all = db.transactions.filter((t) => t.occurred_on.startsWith(month))
-    return {
-      income: all.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0),
-      expense: all.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0),
-    }
-  }, [db.transactions, month])
+  // Summary chips (always full period, ignore kind filter)
+  const periodTotals = useMemo(
+    () => ({
+      income: periodTx.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0),
+      expense: periodTx.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0),
+    }),
+    [periodTx],
+  )
 
   function openAdd() {
     setEditTx(null)
@@ -116,13 +265,33 @@ export default function Transactions() {
         occurred_on: date,
         note: note.trim() || null,
         recurring_rule_id: null,
+        trade_id: null,
       })
     }
     setEditTx(null)
     setOpen(false)
   }
 
-  const isCurrentMonth = month === monthKey(todayISO())
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const thStyle: React.CSSProperties = {
+    padding: '10px 12px',
+    fontSize: 11,
+    fontWeight: 600,
+    color: 'var(--text-3)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    textAlign: 'left',
+    whiteSpace: 'nowrap',
+    background: 'var(--surface-2)',
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: '8px 12px',
+    fontSize: 13,
+    color: 'var(--text-1)',
+    borderTop: '1px solid var(--border)',
+    verticalAlign: 'middle',
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -132,12 +301,10 @@ export default function Transactions() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 20,
+          marginBottom: 16,
         }}
       >
-        <h1
-          style={{ fontWeight: 700, fontSize: 22, color: 'var(--text-1)', letterSpacing: '-0.02em' }}
-        >
+        <h1 style={{ fontWeight: 700, fontSize: 22, color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
           Transaksi
         </h1>
         <button className="btn" onClick={openAdd} style={{ gap: 6 }}>
@@ -146,66 +313,27 @@ export default function Transactions() {
         </button>
       </div>
 
-      {/* Month nav + summary */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-          gap: 12,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-            overflow: 'hidden',
-          }}
-        >
-          <button
-            className="btn-ghost"
-            onClick={() => setMonth((m) => shiftMonth(m, -1))}
-            aria-label="Bulan sebelumnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 12px' }}
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 500,
-              minWidth: 110,
-              textAlign: 'center',
-              color: 'var(--text-1)',
-              textTransform: 'capitalize',
-            }}
-          >
-            {monthLabel(month)}
-          </span>
-          <button
-            className="btn-ghost"
-            onClick={() => setMonth((m) => shiftMonth(m, 1))}
-            disabled={isCurrentMonth}
-            aria-label="Bulan berikutnya"
-            style={{ border: 'none', borderRadius: 0, minHeight: 44, minWidth: 44, padding: '0 12px' }}
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
+      {/* Period picker */}
+      <PeriodPicker
+        period={period}
+        onChange={(p) => { setPeriod(p); savePeriod(TX_PERIOD_KEY, p) }}
+        monthsWithData={monthsWithData}
+        summaryLabel={summaryLabel}
+      />
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <span className="chip chip-income">+{idr(income)}</span>
-          <span className="chip chip-expense">-{idr(expense)}</span>
-        </div>
+      {/* Summary chips */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <span className="chip chip-income">+{idr(periodTotals.income)}</span>
+        <span className="chip chip-expense">-{idr(periodTotals.expense)}</span>
       </div>
 
+      {/* Line chart */}
+      {chartData.some((d) => d.income > 0 || d.expense > 0) && (
+        <TxLineChart data={chartData} capped={chartCapped} />
+      )}
+
       {/* Filter pills */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {(['all', 'expense', 'income'] as Filter[]).map((k) => {
           const active = filter === k
           return (
@@ -232,11 +360,11 @@ export default function Transactions() {
         })}
       </div>
 
-      {/* Transaction list */}
+      {/* Table or empty state */}
       {list.length === 0 ? (
         <EmptyState
           title="Belum ada transaksi"
-          description={`Belum ada ${filter === 'all' ? 'transaksi' : filter === 'expense' ? 'pengeluaran' : 'pemasukan'} di bulan ini.`}
+          description="Belum ada transaksi di periode ini."
           action={
             <button className="btn" onClick={openAdd}>
               Tambah Transaksi
@@ -244,162 +372,203 @@ export default function Transactions() {
           }
         />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {grouped.map(([day, txs]) => {
-            const dayInc = txs.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0)
-            const dayExp = txs.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0)
-            return (
-            <div key={day}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  marginBottom: 8,
-                  paddingLeft: 4,
-                  paddingRight: 4,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: 'var(--text-3)',
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {dateLabel(day)}
-                </span>
-                <span style={{ display: 'flex', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                  {dayInc > 0 && (
-                    <span style={{ color: 'var(--income)' }}>+{idr(dayInc)}</span>
-                  )}
-                  {dayExp > 0 && (
-                    <span style={{ color: 'var(--expense)' }}>-{idr(dayExp)}</span>
-                  )}
-                </span>
-              </div>
-              <div
-                className="card"
-                style={{ padding: 0, overflow: 'hidden' }}
-              >
-                {txs.map((tx, i) => {
-                  const cat = db.categories.find((c) => c.id === tx.category_id)?.name
-                  const acc = db.accounts.find((a) => a.id === tx.account_id)?.name
-                  const unsaved = failedIds.has(tx.id)
-                  const isIncome = tx.kind === 'income'
-                  const isLinkedTrade = tx.trade_id != null
-                  return (
-                    <div
-                      key={tx.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '10px 16px',
-                        minHeight: 56,
-                        borderTop: i > 0 ? '1px solid var(--border)' : 'none',
-                        opacity: unsaved ? 0.6 : 1,
-                      }}
-                    >
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as unknown as undefined }}>
+          <table
+            style={{
+              width: '100%',
+              minWidth: 580,
+              borderCollapse: 'collapse',
+              fontSize: 13,
+            }}
+          >
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, minWidth: 80 }}>Tanggal</th>
+                <th style={{ ...thStyle, minWidth: 140, width: '30%' }}>Catatan</th>
+                <th style={{ ...thStyle, minWidth: 100 }}>Kategori</th>
+                <th style={{ ...thStyle, minWidth: 90 }}>Rekening</th>
+                <th style={{ ...thStyle, minWidth: 110, textAlign: 'right' }}>Masuk</th>
+                <th style={{ ...thStyle, minWidth: 110, textAlign: 'right' }}>Keluar</th>
+                <th style={{ ...thStyle, width: 88 }} aria-label="Aksi" />
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((tx) => {
+                const cat = db.categories.find((c) => c.id === tx.category_id)?.name
+                const acc = db.accounts.find((a) => a.id === tx.account_id)?.name
+                const unsaved = failedIds.has(tx.id)
+                const isIncome = tx.kind === 'income'
+                const isLinkedTrade = tx.trade_id != null
+
+                return (
+                  <tr
+                    key={tx.id}
+                    style={{ opacity: unsaved ? 0.6 : 1, background: 'var(--surface)' }}
+                  >
+                    {/* Tanggal */}
+                    <td style={{ ...tdStyle, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
+                      {dateLabel(tx.occurred_on)}
+                    </td>
+
+                    {/* Catatan */}
+                    <td style={{ ...tdStyle, maxWidth: 200 }}>
                       <div
                         style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 'var(--radius-sm)',
-                          background: isIncome ? 'var(--income)' : 'var(--expense)',
-                          color: isIncome ? 'var(--income-fg)' : 'var(--expense-fg)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontWeight: 500,
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          fontWeight: 700,
-                          fontSize: 16,
+                          gap: 6,
                         }}
-                        aria-hidden="true"
                       >
-                        {isIncome ? '+' : '-'}
+                        {tx.note || (isIncome ? 'Pemasukan' : 'Pengeluaran')}
+                        {unsaved && (
+                          <span style={{ fontSize: 11, color: 'var(--warn)', flexShrink: 0 }}>
+                            belum tersimpan
+                          </span>
+                        )}
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 500,
-                            color: 'var(--text-1)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
+                      {isLinkedTrade && (
+                        <span
+                          className="chip"
+                          style={{ fontSize: 11, padding: '1px 6px', marginTop: 2, display: 'inline-block' }}
                         >
-                          {tx.note || cat || (isIncome ? 'Pemasukan' : 'Pengeluaran')}
-                          {unsaved && (
-                            <span
-                              style={{ marginLeft: 6, fontSize: 12, color: 'var(--warn)' }}
-                            >
-                              belum tersimpan
-                            </span>
-                          )}
-                        </div>
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          {isLinkedTrade && (
-                            <span
-                              className="chip"
-                              style={{
-                                fontSize: 11,
-                                padding: '1px 6px',
-                                marginRight: cat || acc ? 4 : 0,
-                                verticalAlign: 'middle',
-                              }}
-                            >
-                              Investasi
-                            </span>
-                          )}
-                          {cat}{acc ? ` · ${acc}` : ''}
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 600,
-                          fontSize: 14,
-                          color: isIncome ? 'var(--income)' : 'var(--expense)',
-                          textAlign: 'right' as const,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {isIncome ? '+' : '-'}{idr(tx.amount)}
-                      </div>
+                          Investasi
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Kategori */}
+                    <td style={{ ...tdStyle, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
+                      {cat ?? <span style={{ color: 'var(--text-3)' }}>-</span>}
+                    </td>
+
+                    {/* Rekening */}
+                    <td style={{ ...tdStyle, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
+                      {acc ?? <span style={{ color: 'var(--text-3)' }}>-</span>}
+                    </td>
+
+                    {/* Masuk */}
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 600,
+                        color: isIncome ? 'var(--income)' : 'var(--text-3)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {isIncome ? idr(tx.amount) : ''}
+                    </td>
+
+                    {/* Keluar */}
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 600,
+                        color: !isIncome ? 'var(--expense)' : 'var(--text-3)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {!isIncome ? idr(tx.amount) : ''}
+                    </td>
+
+                    {/* Aksi */}
+                    <td style={{ ...tdStyle, padding: '0 4px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {isLinkedTrade ? (
-                        <div style={{ width: 44 + 8 + 44, flexShrink: 0 }} aria-hidden="true" />
+                        <span style={{ display: 'inline-block', width: 88 }} />
                       ) : (
                         <>
                           <button
                             className="btn-ghost"
                             aria-label="Edit transaksi"
                             onClick={() => openEdit(tx)}
-                            style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--text-2)' }}
+                            style={{
+                              padding: 8,
+                              minHeight: 44,
+                              minWidth: 44,
+                              border: 'none',
+                              color: 'var(--text-2)',
+                            }}
                           >
-                            <Pencil size={15} />
+                            <Pencil size={14} />
                           </button>
                           <button
                             className="btn-ghost"
                             aria-label="Hapus transaksi"
                             onClick={() => setDeleteTarget(tx)}
-                            style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--expense)' }}
+                            style={{
+                              padding: 8,
+                              minHeight: 44,
+                              minWidth: 44,
+                              border: 'none',
+                              color: 'var(--expense)',
+                            }}
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={14} />
                           </button>
                         </>
                       )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-            )
-          })}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+
+            {/* Total row */}
+            <tfoot>
+              <tr style={{ background: 'var(--surface-2)' }}>
+                <td
+                  colSpan={4}
+                  style={{
+                    ...tdStyle,
+                    fontWeight: 700,
+                    fontSize: 12,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-2)',
+                    borderTop: '2px solid var(--border)',
+                  }}
+                >
+                  Total
+                </td>
+                <td
+                  style={{
+                    ...tdStyle,
+                    textAlign: 'right',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    color: totals.income > 0 ? 'var(--income)' : 'var(--text-3)',
+                    whiteSpace: 'nowrap',
+                    borderTop: '2px solid var(--border)',
+                  }}
+                >
+                  {totals.income > 0 ? idr(totals.income) : '-'}
+                </td>
+                <td
+                  style={{
+                    ...tdStyle,
+                    textAlign: 'right',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    color: totals.expense > 0 ? 'var(--expense)' : 'var(--text-3)',
+                    whiteSpace: 'nowrap',
+                    borderTop: '2px solid var(--border)',
+                  }}
+                >
+                  {totals.expense > 0 ? idr(totals.expense) : '-'}
+                </td>
+                <td style={{ ...tdStyle, borderTop: '2px solid var(--border)' }} />
+              </tr>
+            </tfoot>
+          </table>
         </div>
       )}
 
@@ -435,8 +604,6 @@ export default function Transactions() {
                     fontWeight: 600,
                     fontSize: 14,
                     cursor: 'pointer',
-                    minHeight: 44,
-                    fontFamily: 'inherit',
                     transition: 'all 150ms ease-out',
                   }}
                 >
@@ -499,7 +666,6 @@ export default function Transactions() {
               onChange={(e) => setNote(e.target.value)}
             />
           </Field>
-
         </form>
       </Sheet>
 
