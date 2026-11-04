@@ -151,6 +151,36 @@ for (const t of ['--header-h','--rail-w','--sidebar-w','--tabbar-h'])
 check('index.html: default palet b', html.includes('data-palette="b"') && html.includes("|| 'b'"))
 check('theme.tsx: default palet b', theme.includes("|| 'b'"))
 
+// ── Mode Akun (investasi) ─────────────────────────────────────────────────────
+
+// App.tsx: data-account-mode attribute pada shell div
+check('App.tsx: data-account-mode pada shell div', app.includes('data-account-mode={accountMode}'))
+
+// App.tsx: INVEST_HIDDEN dan INVEST_HIDDEN_MOBILE didefinisikan
+check('App.tsx: INVEST_HIDDEN = [tx, lap]', /INVEST_HIDDEN[^=]*=\s*\[['"]tx['"],\s*['"]lap['"]\]/.test(app))
+check('App.tsx: INVEST_HIDDEN_MOBILE didefinisikan', app.includes("INVEST_HIDDEN_MOBILE"))
+
+// App.tsx: useMode() dipanggil di Shell
+check('App.tsx: useMode dipanggil di Shell', app.includes('useMode') && app.includes("from './lib/useMode'"))
+
+// App.tsx: tab filtering berdasarkan accountMode
+check('App.tsx: mobileTabs filter berdasarkan accountMode', /mobileTabs\s*=/.test(app))
+check('App.tsx: sideTabs filter berdasarkan accountMode', /sideTabs\s*=/.test(app))
+
+// App.tsx: guard redirect jika tab tidak valid di mode investasi
+check('App.tsx: route guard mode investasi', app.includes("accountMode === 'investasi'") && (app.includes("go('inv')") || app.includes("go(\"inv\")")))
+
+// Dashboard.tsx: KPI Pemasukan hanya tampil di mode lengkap
+check('Dashboard.tsx: KPI Pemasukan conditional accountMode', /accountMode === 'lengkap'[^}]*kpi-pemasukan|kpi-pemasukan[^}]*accountMode === 'lengkap'/.test(dash) || (dash.includes("accountMode === 'lengkap'") && dash.includes('kpi-pemasukan')))
+
+// Dashboard.tsx: Porsi Kontributor card ditambahkan
+check('Dashboard.tsx: Porsi Kontributor card', dash.includes('Porsi Kontributor') && dash.includes('contribShares'))
+
+// Settings.tsx: Mode Akun section ada
+const settingsPage = read('src/pages/Settings.tsx')
+check('Settings.tsx: Mode Akun section ada', settingsPage.includes('Mode Akun'))
+check('Settings.tsx: setAccountMode dipanggil', settingsPage.includes('setAccountMode'))
+
 // ── 2. BROWSER (Playwright) ───────────────────────────────────────────────────
 
 const PREVIEW_PORT = 4174

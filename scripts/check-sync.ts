@@ -310,5 +310,65 @@ ok('trade dari server lama (tanpa account_id) tetap muncul di UI', (() => {
     !blockedByIds(op1, new Set(['a1'])))
 }
 
+// ── profiles (tabel baru, OPTIONAL) ───────────────────────────────────────────
+{
+  const profileOp: Op = ups('profiles', row('u1', { mode: 'lengkap', mode_locked: false }))
+  const db1 = applyOps(emptyDB(), [profileOp])
+  ok('profiles: upsert menambah baris', db1.profiles.length === 1)
+
+  const profileUpdate: Op = ups('profiles', row('u1', { mode: 'investasi', mode_locked: false }))
+  const db2 = applyOps(db1, [profileUpdate])
+  ok('profiles: upsert id sama = update', db2.profiles.length === 1 && (db2.profiles[0] as { mode: string }).mode === 'investasi')
+
+  const db3 = applyOps(db2, [del('profiles', 'u1')])
+  ok('profiles: delete menghapus baris', db3.profiles.length === 0)
+}
+
+// ── contributors (tabel baru, OPTIONAL) ───────────────────────────────────────
+{
+  const contribOp: Op = ups('contributors', row('c1', { name: 'Dio', sort_order: 0 }))
+  const db1 = applyOps(emptyDB(), [contribOp])
+  ok('contributors: upsert menambah baris', db1.contributors.length === 1)
+
+  const contribUpdate: Op = ups('contributors', row('c1', { name: 'Dio Updated', sort_order: 0 }))
+  const db2 = applyOps(db1, [contribUpdate])
+  ok('contributors: upsert id sama = update (idempotent)', db2.contributors.length === 1 && (db2.contributors[0] as { name: string }).name === 'Dio Updated')
+
+  const db3 = applyOps(db2, [del('contributors', 'c1')])
+  ok('contributors: delete menghapus baris', db3.contributors.length === 0)
+}
+
+// ── contributor_id FK pada trade ──────────────────────────────────────────────
+{
+  const tradeWithContrib: Op = ups('trades', row('t1', {
+    asset_id: 'a1',
+    platform_id: 'p1',
+    account_id: null,
+    contributor_id: 'c1',
+    side: 'buy',
+    quantity: 0.001,
+    price_per_unit: 1e9,
+    fee: 0,
+    traded_on: '2026-01-01',
+  }))
+
+  ok('trade contributor_id: diblokir oleh kontributor gagal', blockedByIds(tradeWithContrib, new Set(['c1'])))
+  ok('trade contributor_id: tidak diblokir kontributor lain', !blockedByIds(tradeWithContrib, new Set(['c99'])))
+
+  const failedContrib: FailedOp = {
+    ...ups('contributors', row('c1', { name: 'Dio', sort_order: 0 })),
+    error: 'constraint violation',
+    blocked: false,
+  }
+  ok('findBlocker trade: diblokir kontributor gagal', findBlocker(tradeWithContrib, [failedContrib]) === failedContrib.opId)
+
+  // contributor_id = null tidak memblokir
+  const tradeNullContrib: Op = ups('trades', row('t2', {
+    asset_id: 'a1', platform_id: 'p1', account_id: null, contributor_id: null,
+    side: 'buy', quantity: 0.001, price_per_unit: 1e9, fee: 0, traded_on: '2026-01-01',
+  }))
+  ok('trade contributor_id null: tidak diblokir kontributor gagal', !blockedByIds(tradeNullContrib, new Set(['c1'])))
+}
+
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
 process.exit(failed === 0 ? 0 : 1)

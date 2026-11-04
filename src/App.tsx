@@ -321,8 +321,6 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         className="md:hidden fixed inset-x-0 bottom-0 z-[var(--z-nav)] min-h-[var(--tabbar-h)]"
         aria-label="Navigasi bawah"
         style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${mobileTabs.length}, 1fr)`,
           backgroundColor: 'var(--surface)',
           borderTop: '1px solid var(--border)',
           backdropFilter: 'blur(16px)',
@@ -331,6 +329,13 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           transition: 'background-color 0.25s ease',
         }}
       >
+        {/* Grid dentro do nav — display:grid aqui não sobrepõe md:hidden no nav */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${mobileTabs.length}, 1fr)`,
+          }}
+        >
         {mobileTabs.map(({ id, label, Icon }) => {
           const active = tab === id
           return (
@@ -390,6 +395,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
             </button>
           )
         })}
+        </div>
       </nav>
     </div>
   )

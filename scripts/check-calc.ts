@@ -1,6 +1,6 @@
 // Uji cepat kalkulasi investasi + fungsi murni format. Jalankan: npm run check:calc
 import { createHash } from 'node:crypto'
-import { computePosition, flowsOf, portfolioSeries, summarize, xirr } from '../src/lib/calc'
+import { computePosition, contributorShares, flowsOf, portfolioSeries, summarize, xirr } from '../src/lib/calc'
 import { formatPercent, parseNum, todayISO } from '../src/lib/format'
 import { formatMoneyInput, parseMoneyInput, formatQuantityInput, parseQuantityInput } from '../src/lib/numInput'
 import { formatShort } from '../src/lib/amount'
@@ -619,6 +619,61 @@ ok('formatPercent negatif besar aman', formatPercent(-1) === '-100,00%')
   // Kas hanya punya opening balance 2_000_000, tidak ada transaksi dari Kas dalam test ini
   const kasBalFinal = accountBalance(fakeAccKas, [], [], '2026-10-31')
   ok('21.10 saldo Kas dengan opening balance saja tidak negatif', kasBalFinal >= 0)
+}
+
+// ── 22) contributorShares ───────────────────────────────────────────────────────────
+{
+  const contribs = [
+    { id: 'c1', name: 'Dio' },
+    { id: 'c2', name: 'Pasangan' },
+  ]
+
+  // 22.1 Dua kontributor, porsi proporsional setoran
+  const trades22a = [
+    { side: 'buy' as const, quantity: 1, price_per_unit: 6_000_000, fee: 0, contributor_id: 'c1' },
+    { side: 'buy' as const, quantity: 1, price_per_unit: 4_000_000, fee: 0, contributor_id: 'c2' },
+  ]
+  // c1 setor 6_000_000, c2 setor 4_000_000; total 10_000_000
+  const s22a = contributorShares(trades22a, contribs, 12_000_000)
+  const dioShare = s22a.find((s) => s.contributorId === 'c1')!
+  const pasShare = s22a.find((s) => s.contributorId === 'c2')!
+  ok('22.1 contributorShares: 2 kontributor jumlah benar', s22a.length === 2)
+  ok('22.2 sharePct Dio = 0.6', near(dioShare.sharePct, 0.6), String(dioShare.sharePct))
+  ok('22.3 shareValue Dio = 7_200_000', near(dioShare.shareValue, 7_200_000), String(dioShare.shareValue))
+  ok('22.4 sharePL Dio = 1_200_000', near(dioShare.sharePL, 7_200_000 - 6_000_000), String(dioShare.sharePL))
+  ok('22.5 sharePct Pasangan = 0.4', near(pasShare.sharePct, 0.4), String(pasShare.sharePct))
+  ok('22.6 capped = false untuk keduanya', !dioShare.capped && !pasShare.capped)
+
+  // 22.7 Kontributor dengan setoran negatif (jual > beli) → capped
+  const trades22b = [
+    { side: 'buy' as const, quantity: 1, price_per_unit: 5_000_000, fee: 0, contributor_id: 'c1' },
+    { side: 'sell' as const, quantity: 2, price_per_unit: 5_000_000, fee: 0, contributor_id: 'c2' },
+  ]
+  const s22b = contributorShares(trades22b, contribs, 8_000_000)
+  const dioCapped = s22b.find((s) => s.contributorId === 'c1')!
+  const pasCapped = s22b.find((s) => s.contributorId === 'c2')!
+  ok('22.7 capped = true jika netDeposit <= 0', pasCapped.capped)
+  ok('22.8 sharePct = 0 jika capped', near(pasCapped.sharePct, 0))
+  ok('22.9 sharePct = 1 jika hanya 1 valid', near(dioCapped.sharePct, 1))
+
+  // 22.10 contributor_id = null → ditampilkan sebagai Tanpa nama
+  const trades22c = [
+    { side: 'buy' as const, quantity: 1, price_per_unit: 3_000_000, fee: 0, contributor_id: null },
+  ]
+  const s22c = contributorShares(trades22c, contribs, 4_000_000)
+  ok('22.10 null contributor_id → Tanpa nama', s22c.length === 1 && s22c[0].name === 'Tanpa nama')
+  ok('22.11 sharePct Tanpa nama = 1', near(s22c[0].sharePct, 1))
+
+  // 22.12 Tidak ada trades → array kosong
+  const s22d = contributorShares([], contribs, 0)
+  ok('22.12 trades kosong → array kosong', s22d.length === 0)
+
+  // 22.13 portfolioValue = 0 → semua shareValue = 0
+  const trades22e = [
+    { side: 'buy' as const, quantity: 1, price_per_unit: 5_000_000, fee: 0, contributor_id: 'c1' },
+  ]
+  const s22e = contributorShares(trades22e, contribs, 0)
+  ok('22.13 portfolioValue = 0 → shareValue = 0', near(s22e[0].shareValue, 0))
 }
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
