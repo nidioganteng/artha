@@ -8,7 +8,7 @@ import { useContainerWidth } from '../lib/useContainerWidth'
 import { Sheet } from './Sheet'
 
 type ChartCustomRange = { from: string; to: string }
-type Period = 1 | 3 | 6 | 12 | 'all' | 'custom'
+type Period = 3 | 6 | 12 | 'all' | 'custom'
 
 const MK_NAMES = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
 const MK_NAMES_FULL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
@@ -26,14 +26,13 @@ function todayMk(): string {
 function readPeriod(): Period {
   try {
     const v = localStorage.getItem('artha:chart:period')
-    if (v === '1') return 1
     if (v === '3') return 3
     if (v === '6') return 6
     if (v === '12') return 12
     if (v === 'all') return 'all'
     if (v === 'custom') return 'custom'
   } catch { /* abaikan */ }
-  return 1
+  return 3
 }
 
 function readCustomRange(): ChartCustomRange | null {
@@ -476,7 +475,6 @@ export function InvestmentChart({
       <div style={{ marginBottom: 12 }}>
         <ChipBar>
           {([
-            { v: 1 as Period, label: 'Bulan ini' },
             { v: 3 as Period, label: '3B' },
             { v: 6 as Period, label: '6B' },
             { v: 12 as Period, label: '12B' },
