@@ -16,6 +16,7 @@ import {
 import { configured, supabase } from './lib/supabase'
 import { StoreProvider, useStore } from './lib/store'
 import { ThemeProvider, useTheme } from './lib/theme'
+import { useMode } from './lib/useMode'
 import { SyncBadge } from './ui/SyncBadge'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -25,17 +26,8 @@ import Recurring from './pages/Recurring'
 import Report from './pages/Report'
 import Settings from './pages/Settings'
 
-// Tabs di bottom tab bar (mobile) — tidak termasuk Laporan.
-const TABS = [
-  { id: 'home', label: 'Ringkasan',  Icon: LayoutDashboard },
-  { id: 'tx',   label: 'Transaksi',  Icon: ArrowLeftRight },
-  { id: 'inv',  label: 'Investasi',  Icon: TrendingUp },
-  { id: 'rec',  label: 'Rutin',      Icon: RefreshCw },
-  { id: 'set',  label: 'Pengaturan', Icon: SettingsIcon },
-] as const
-
-// Semua tab termasuk Laporan — hanya muncul di sidebar/rail (>= md).
-const SIDE_TABS = [
+// Semua tab yang mungkin muncul di sidebar/rail (>= md).
+const ALL_SIDE_TABS = [
   { id: 'home', label: 'Ringkasan',  Icon: LayoutDashboard },
   { id: 'tx',   label: 'Transaksi',  Icon: ArrowLeftRight },
   { id: 'inv',  label: 'Investasi',  Icon: TrendingUp },
@@ -44,11 +36,24 @@ const SIDE_TABS = [
   { id: 'set',  label: 'Pengaturan', Icon: SettingsIcon },
 ] as const
 
-type Tab = (typeof SIDE_TABS)[number]['id']
+// Semua tab yang mungkin muncul di bottom tab bar (mobile, tidak termasuk Laporan).
+const ALL_TABS = [
+  { id: 'home', label: 'Ringkasan',  Icon: LayoutDashboard },
+  { id: 'tx',   label: 'Transaksi',  Icon: ArrowLeftRight },
+  { id: 'inv',  label: 'Investasi',  Icon: TrendingUp },
+  { id: 'rec',  label: 'Rutin',      Icon: RefreshCw },
+  { id: 'set',  label: 'Pengaturan', Icon: SettingsIcon },
+] as const
 
-function tabFromHash(): Tab {
+// Tab yang disembunyikan di mode investasi
+const INVEST_HIDDEN: string[] = ['tx', 'lap']
+const INVEST_HIDDEN_MOBILE: string[] = ['tx']
+
+type Tab = (typeof ALL_SIDE_TABS)[number]['id']
+
+function tabFromHash(validTabs: readonly { id: string }[]): Tab {
   const h = window.location.hash.replace('#', '')
-  return (SIDE_TABS.find((t) => t.id === h)?.id ?? 'home') as Tab
+  return (validTabs.find((t) => t.id === h)?.id ?? 'home') as Tab
 }
 
 function ModeToggle() {
@@ -76,16 +81,49 @@ function ModeToggle() {
 }
 
 function Shell({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>(tabFromHash)
   const [focusFailed, setFocusFailed] = useState(false)
-  const { ready, online } = useStore()
+  const { ready, online, db, save, userId } = useStore()
+  const { mode: accountMode } = useMode()
   const shouldReduceMotion = useReducedMotion()
 
+  // Filter tab berdasarkan mode akun
+  const sideTabs = ALL_SIDE_TABS.filter((t) =>
+    accountMode === 'investasi' ? !INVEST_HIDDEN.includes(t.id) : true,
+  )
+  const mobileTabs = ALL_TABS.filter((t) =>
+    accountMode === 'investasi' ? !INVEST_HIDDEN_MOBILE.includes(t.id) : true,
+  )
+
+  const [tab, setTab] = useState<Tab>(() => tabFromHash(sideTabs))
+
+  // Pastikan tab aktif valid untuk mode saat ini
   useEffect(() => {
-    const on = () => setTab(tabFromHash())
+    if (accountMode === 'investasi' && (tab === 'tx' || tab === 'lap')) {
+      go('inv')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMode, tab])
+
+  useEffect(() => {
+    const on = () => {
+      const h = window.location.hash.replace('#', '')
+      const validId = sideTabs.find((t) => t.id === h)?.id
+      if (validId) setTab(validId as Tab)
+      else setTab('home')
+    }
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sideTabs])
+
+  // Buat baris profiles jika belum ada setelah store siap (akun lama tanpa migrasi).
+  const profileCreatedRef = useRef(false)
+  useEffect(() => {
+    if (ready && db.profiles.length === 0 && !profileCreatedRef.current) {
+      profileCreatedRef.current = true
+      save('profiles', { id: userId, mode: 'lengkap', mode_locked: false })
+    }
+  }, [ready, db.profiles.length, save, userId])
 
   const go = (t: Tab) => {
     window.location.hash = t
@@ -102,6 +140,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   return (
     <div
       data-testid={ready ? 'shell-ready' : 'shell-loading'}
+      data-account-mode={accountMode}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -175,12 +214,12 @@ function Shell({ onLogout }: { onLogout: () => void }) {
             transition: 'background-color 0.25s ease',
           }}
         >
-          {SIDE_TABS.map(({ id, label, Icon }) => {
+          {sideTabs.map(({ id, label, Icon }) => {
             const active = tab === id
             return (
               <button
                 key={id}
-                onClick={() => go(id)}
+                onClick={() => go(id as Tab)}
                 title={label}
                 aria-label={label}
                 aria-current={active ? 'page' : undefined}
@@ -192,7 +231,6 @@ function Shell({ onLogout }: { onLogout: () => void }) {
                 }}
               >
                 <Icon size={20} />
-                {/* Label: só visível em lg (sidebar) */}
                 <span className="hidden lg:block" style={{ fontSize: 14 }}>
                   {label}
                 </span>
@@ -265,10 +303,10 @@ function Shell({ onLogout }: { onLogout: () => void }) {
                 transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: 'easeOut' }}
               >
                 {tab === 'home' && <Dashboard goto={(t) => go(t as Tab)} />}
-                {tab === 'tx' && <Transactions />}
+                {tab === 'tx' && accountMode === 'lengkap' && <Transactions />}
                 {tab === 'inv' && <Investments />}
                 {tab === 'rec' && <Recurring />}
-                {tab === 'lap' && <Report goto={(t) => go(t as Tab)} />}
+                {tab === 'lap' && accountMode === 'lengkap' && <Report goto={(t) => go(t as Tab)} />}
                 {tab === 'set' && <Settings onLogout={onLogout} focusFailed={focusFailed} />}
               </m.div>
             </AnimatePresence>
@@ -280,9 +318,11 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           Gunakan HANYA kelas Tailwind untuk layout (grid, fixed, inset, z-index, min-h).
           TIDAK ada display di inline style — md:hidden akan bekerja. ── */}
       <nav
-        className="md:hidden fixed inset-x-0 bottom-0 z-[var(--z-nav)] grid grid-cols-5 min-h-[var(--tabbar-h)]"
+        className="md:hidden fixed inset-x-0 bottom-0 z-[var(--z-nav)] min-h-[var(--tabbar-h)]"
         aria-label="Navigasi bawah"
         style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${mobileTabs.length}, 1fr)`,
           backgroundColor: 'var(--surface)',
           borderTop: '1px solid var(--border)',
           backdropFilter: 'blur(16px)',
@@ -291,12 +331,12 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           transition: 'background-color 0.25s ease',
         }}
       >
-        {TABS.map(({ id, label, Icon }) => {
+        {mobileTabs.map(({ id, label, Icon }) => {
           const active = tab === id
           return (
             <button
               key={id}
-              onClick={() => go(id)}
+              onClick={() => go(id as Tab)}
               aria-label={label}
               aria-current={active ? 'page' : undefined}
               style={{

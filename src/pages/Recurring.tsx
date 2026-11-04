@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
+import { useMode } from '../lib/useMode'
 import { monthKey, monthLabel, shiftMonth, todayISO } from '../lib/format'
 import { formatShort } from '../lib/amount'
 import { Sheet, EmptyState, Field, Chip, MoneyInput, ConfirmDialog } from '../ui'
@@ -14,6 +15,7 @@ const KIND_LABEL: Record<RecurringRule['kind'], string> = {
 
 export default function Recurring() {
   const { db, save, remove } = useStore()
+  const { mode } = useMode()
   const [month, setMonth] = useState(() => monthKey(todayISO()))
   const monthDate = `${month}-01`
 
@@ -32,9 +34,9 @@ export default function Recurring() {
   const rules = useMemo(
     () =>
       db.recurring_rules
-        .filter((r) => r.active)
+        .filter((r) => r.active && (mode === 'investasi' ? r.kind === 'invest' : true))
         .sort((a, b) => a.day_of_month - b.day_of_month),
-    [db.recurring_rules],
+    [db.recurring_rules, mode],
   )
 
   const cats = db.categories.filter((c) =>
