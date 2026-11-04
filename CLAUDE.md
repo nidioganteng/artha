@@ -50,6 +50,10 @@ scripts/check-contrast.ts uji kontras WCAG AA 72 pasang warna (npm run check:con
 scripts/check-layout.ts  uji aturan layout shell: nav eksklusif, portal, transform, palet (npm run check:layout)
 ```
 
+## Aturan kerja Git
+
+- Kerja hanya di branch aktif. Jangan membuat branch baru, worktree, atau berpindah branch, dan jangan merge, rebase, atau reset kecuali diminta eksplisit. Commit kecil per revisi. Jangan git push kecuali diminta; jangan pernah force push.
+
 ## Aturan penting arsitektur
 
 1. **Offline-first.** Semua perubahan lewat `save()` dan `remove()` dari `useStore()`. Jangan memanggil Supabase langsung dari halaman. Store menyimpan perubahan ke antrean lokal lalu mengirimnya saat online.
