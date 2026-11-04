@@ -290,6 +290,7 @@ export default function Transactions() {
                   const acc = db.accounts.find((a) => a.id === tx.account_id)?.name
                   const unsaved = failedIds.has(tx.id)
                   const isIncome = tx.kind === 'income'
+                  const isLinkedTrade = tx.trade_id != null
                   return (
                     <div
                       key={tx.id}
@@ -341,11 +342,22 @@ export default function Transactions() {
                             </span>
                           )}
                         </div>
-                        {(cat || acc) && (
-                          <div className="muted" style={{ fontSize: 12 }}>
-                            {cat}{acc ? ` · ${acc}` : ''}
-                          </div>
-                        )}
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          {isLinkedTrade && (
+                            <span
+                              className="chip"
+                              style={{
+                                fontSize: 11,
+                                padding: '1px 6px',
+                                marginRight: cat || acc ? 4 : 0,
+                                verticalAlign: 'middle',
+                              }}
+                            >
+                              Investasi
+                            </span>
+                          )}
+                          {cat}{acc ? ` · ${acc}` : ''}
+                        </div>
                       </div>
                       <div
                         style={{
@@ -359,22 +371,28 @@ export default function Transactions() {
                       >
                         {isIncome ? '+' : '-'}{idr(tx.amount)}
                       </div>
-                      <button
-                        className="btn-ghost"
-                        aria-label="Edit transaksi"
-                        onClick={() => openEdit(tx)}
-                        style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--text-2)' }}
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        className="btn-ghost"
-                        aria-label="Hapus transaksi"
-                        onClick={() => setDeleteTarget(tx)}
-                        style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--expense)' }}
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {isLinkedTrade ? (
+                        <div style={{ width: 44 + 8 + 44, flexShrink: 0 }} aria-hidden="true" />
+                      ) : (
+                        <>
+                          <button
+                            className="btn-ghost"
+                            aria-label="Edit transaksi"
+                            onClick={() => openEdit(tx)}
+                            style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--text-2)' }}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            className="btn-ghost"
+                            aria-label="Hapus transaksi"
+                            onClick={() => setDeleteTarget(tx)}
+                            style={{ padding: 8, minHeight: 44, minWidth: 44, border: 'none', color: 'var(--expense)' }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   )
                 })}
