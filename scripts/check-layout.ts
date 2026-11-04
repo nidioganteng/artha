@@ -180,6 +180,9 @@ check('Dashboard.tsx: Porsi Kontributor card', dash.includes('Porsi Kontributor'
 const settingsPage = read('src/pages/Settings.tsx')
 check('Settings.tsx: Mode Akun section ada', settingsPage.includes('Mode Akun'))
 check('Settings.tsx: setAccountMode dipanggil', settingsPage.includes('setAccountMode'))
+check('Settings.tsx: toggle kunci mode (role=switch)', settingsPage.includes('role="switch"') && settingsPage.includes('setModeLocked') && settingsPage.includes('data-testid="mode-lock-toggle"'))
+check('Settings.tsx: ConfirmDialog untuk mode lengkap', settingsPage.includes("pendingMode === 'lengkap'") && settingsPage.includes('Ganti ke Mode Lengkap'))
+check('Settings.tsx: ConfirmDialog buka kunci mode', settingsPage.includes('confirmUnlock') && settingsPage.includes('Buka Kunci'))
 
 // ── 2. BROWSER (Playwright) ───────────────────────────────────────────────────
 
@@ -1001,6 +1004,32 @@ async function runPlaywright() {
         check(`WAJIB: tidak ada font < 12px di #${tab} ${w}px (${r.count} pelanggaran)`, r.ok, r.detail)
         await p.close()
       }
+    }
+
+    // ── Toggle kunci mode: ada, terlihat, dan 44x44px di Settings ───────────────
+    for (const w of [360, 390]) {
+      const p = await browser.newPage()
+      await p.setViewportSize({ width: w, height: 700 })
+      await p.goto(`${BASE}/#set`)
+      await p.waitForSelector('[data-testid="shell-ready"]', { timeout: 8000 }).catch(() => {})
+      await p.waitForTimeout(400)
+
+      const r = await p.evaluate(`(function() {
+        var toggle = document.querySelector('[data-testid="mode-lock-toggle"]');
+        if (!toggle) return { ok: false, detail: 'toggle mode-lock-toggle tidak ditemukan' };
+        var rect = toggle.getBoundingClientRect();
+        var visible = rect.width > 0 && rect.height > 0 && rect.top >= 0;
+        var areaOk = rect.width >= 44 && rect.height >= 44;
+        var hasRole = toggle.getAttribute('role') === 'switch';
+        var hasAria = toggle.hasAttribute('aria-checked');
+        return {
+          ok: visible && areaOk && hasRole && hasAria,
+          detail: 'w=' + Math.round(rect.width) + ' h=' + Math.round(rect.height) + ' role=' + toggle.getAttribute('role') + ' aria-checked=' + toggle.getAttribute('aria-checked')
+        };
+      })()`) as { ok: boolean; detail: string }
+
+      check(`Settings ${w}px: toggle kunci mode ada, 44x44px, role=switch`, r.ok, r.detail)
+      await p.close()
     }
 
     // Tangkapan layar

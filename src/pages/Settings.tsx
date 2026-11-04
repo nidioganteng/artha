@@ -126,6 +126,8 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
 
   // Konfirmasi ganti mode akun
   const [pendingMode, setPendingMode] = useState<'lengkap' | 'investasi' | null>(null)
+  // Konfirmasi buka kunci mode
+  const [confirmUnlock, setConfirmUnlock] = useState(false)
 
   useEffect(() => {
     if (focusFailed && failedOps.length > 0) {
@@ -160,8 +162,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
   const [editingContrib, setEditingContrib] = useState<Contributor | null>(null)
   const [editContribName, setEditContribName] = useState('')
   const [editContribError, setEditContribError] = useState<string | null>(null)
-  const [confirmDelContrib, setConfirmDelContrib] = useState<{ id: string; name: string } | null>(null)
-  const [blockedContrib, setBlockedContrib] = useState<{ name: string; message: string } | null>(null)
+  const [confirmDelContrib, setConfirmDelContrib] = useState<{ id: string; name: string; tradeCount: number } | null>(null)
 
   // Saldo saat ini per rekening (dari ledger)
   const currentBalances = useMemo(() => {
@@ -327,18 +328,17 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
 
   function tryDeleteContrib(c: Contributor) {
     const trCount = db.trades.filter((t) => t.contributor_id === c.id).length
-    if (trCount > 0) {
-      setBlockedContrib({
-        name: c.name,
-        message: `Kontributor ini masih dipakai di ${trCount} catatan investasi. Ubah catatannya dulu di tab Investasi.`,
-      })
-      return
-    }
-    setConfirmDelContrib({ id: c.id, name: c.name })
+    setConfirmDelContrib({ id: c.id, name: c.name, tradeCount: trCount })
   }
 
   function confirmDeleteContrib() {
     if (!confirmDelContrib) return
+    // Null-out contributor_id pada catatan terkait dulu (offline-first, idempoten)
+    for (const trade of db.trades) {
+      if (trade.contributor_id === confirmDelContrib.id) {
+        save('trades', { ...(trade as unknown as Record<string, unknown>), contributor_id: null })
+      }
+    }
     remove('contributors', confirmDelContrib.id)
     setConfirmDelContrib(null)
   }
@@ -534,11 +534,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
                     disabled={modeLocked}
                     onClick={() => {
                       if (active) return
-                      if (value === 'investasi') {
-                        setPendingMode('investasi')
-                      } else {
-                        setAccountMode('lengkap')
-                      }
+                      setPendingMode(value)
                     }}
                     style={{
                       display: 'flex',
@@ -588,9 +584,82 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
             </div>
             {modeLocked && (
               <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                Mode dikunci oleh admin. Hubungi admin untuk mengubahnya.
+                Mode dikunci.{' '}
+                <button
+                  className="btn-ghost"
+                  onClick={() => setConfirmUnlock(true)}
+                  style={{ fontSize: 12, padding: '2px 8px', minHeight: 32, display: 'inline-flex', verticalAlign: 'middle' }}
+                >
+                  Buka kunci di sini
+                </button>
+                {' '}untuk mengubahnya.
               </p>
             )}
+            {/* Toggle kunci mode */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                marginTop: 20,
+                paddingTop: 16,
+                borderTop: '1px solid var(--border)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Kunci mode</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Mode dikunci agar tidak berubah tidak sengaja
+                </div>
+              </div>
+              <button
+                role="switch"
+                aria-checked={modeLocked}
+                aria-label="Kunci mode"
+                data-testid="mode-lock-toggle"
+                onClick={() => modeLocked ? setConfirmUnlock(true) : setModeLocked(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: 44,
+                  minHeight: 44,
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  padding: 0,
+                }}
+              >
+                <span
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: 44,
+                    height: 26,
+                    padding: 3,
+                    borderRadius: 13,
+                    background: modeLocked ? 'var(--primary)' : 'var(--border)',
+                    transition: 'background 150ms',
+                    pointerEvents: 'none',
+                  }}
+                  aria-hidden="true"
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      background: 'var(--surface)',
+                      transform: modeLocked ? 'translateX(18px)' : 'translateX(0)',
+                      transition: 'transform 150ms',
+                    }}
+                  />
+                </span>
+              </button>
+            </div>
           </Section>
         </div>
 
@@ -1195,6 +1264,26 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
         onCancel={() => setPendingMode(null)}
       />
 
+      {/* ── Konfirmasi ganti ke mode lengkap ─────────── */}
+      <ConfirmDialog
+        open={pendingMode === 'lengkap'}
+        title="Ganti ke Mode Lengkap?"
+        message="Semua fitur ditampilkan kembali. Data tidak berubah."
+        confirmLabel="Ganti Mode"
+        onConfirm={() => { setAccountMode('lengkap'); setPendingMode(null) }}
+        onCancel={() => setPendingMode(null)}
+      />
+
+      {/* ── Konfirmasi buka kunci mode ────────────────── */}
+      <ConfirmDialog
+        open={confirmUnlock}
+        title="Buka Kunci Mode?"
+        message="Setelah dibuka, mode bisa diubah dari halaman ini."
+        confirmLabel="Buka Kunci"
+        onConfirm={() => { setModeLocked(false); setConfirmUnlock(false) }}
+        onCancel={() => setConfirmUnlock(false)}
+      />
+
       {/* ── Edit Kontributor ─────────────────────────── */}
       <Sheet
         open={editingContrib !== null}
@@ -1232,20 +1321,14 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
       <ConfirmDialog
         open={confirmDelContrib !== null}
         title="Hapus Kontributor"
-        message={confirmDelContrib ? `Hapus kontributor "${confirmDelContrib.name}"?` : ''}
+        message={confirmDelContrib
+          ? confirmDelContrib.tradeCount > 0
+            ? `Hapus kontributor "${confirmDelContrib.name}"? ${confirmDelContrib.tradeCount} catatan akan menjadi Tanpa nama.`
+            : `Hapus kontributor "${confirmDelContrib.name}"?`
+          : ''}
         confirmLabel="Hapus"
         onConfirm={confirmDeleteContrib}
         onCancel={() => setConfirmDelContrib(null)}
-      />
-
-      {/* ── Kontributor tidak bisa dihapus ───────────── */}
-      <ConfirmDialog
-        open={blockedContrib !== null}
-        title={blockedContrib ? `Tidak bisa menghapus ${blockedContrib.name}` : 'Tidak bisa menghapus'}
-        message={blockedContrib?.message ?? ''}
-        confirmLabel="Mengerti"
-        onConfirm={() => setBlockedContrib(null)}
-        onCancel={() => setBlockedContrib(null)}
       />
     </div>
   )

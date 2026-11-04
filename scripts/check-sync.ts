@@ -338,7 +338,9 @@ ok('trade dari server lama (tanpa account_id) tetap muncul di UI', (() => {
   ok('contributors: delete menghapus baris', db3.contributors.length === 0)
 }
 
-// ── contributor_id FK pada trade ──────────────────────────────────────────────
+// ── contributor_id FK pada trade (antrean: tambah kontributor baru + trade sekaligus) ───
+// Skenario: user menambah kontributor baru DAN trade yang mereferensinya dalam satu sesi.
+// Jika kontributor gagal di-upsert, trade yang bergantung harus ikut diblokir di antrean.
 {
   const tradeWithContrib: Op = ups('trades', row('t1', {
     asset_id: 'a1',
@@ -352,7 +354,7 @@ ok('trade dari server lama (tanpa account_id) tetap muncul di UI', (() => {
     traded_on: '2026-01-01',
   }))
 
-  ok('trade contributor_id: diblokir oleh kontributor gagal', blockedByIds(tradeWithContrib, new Set(['c1'])))
+  ok('trade contributor_id: diblokir di antrean jika kontributor baru gagal', blockedByIds(tradeWithContrib, new Set(['c1'])))
   ok('trade contributor_id: tidak diblokir kontributor lain', !blockedByIds(tradeWithContrib, new Set(['c99'])))
 
   const failedContrib: FailedOp = {
@@ -360,7 +362,7 @@ ok('trade dari server lama (tanpa account_id) tetap muncul di UI', (() => {
     error: 'constraint violation',
     blocked: false,
   }
-  ok('findBlocker trade: diblokir kontributor gagal', findBlocker(tradeWithContrib, [failedContrib]) === failedContrib.opId)
+  ok('findBlocker trade: diblokir kontributor gagal di antrean', findBlocker(tradeWithContrib, [failedContrib]) === failedContrib.opId)
 
   // contributor_id = null tidak memblokir
   const tradeNullContrib: Op = ups('trades', row('t2', {
@@ -368,6 +370,32 @@ ok('trade dari server lama (tanpa account_id) tetap muncul di UI', (() => {
     side: 'buy', quantity: 0.001, price_per_unit: 1e9, fee: 0, traded_on: '2026-01-01',
   }))
   ok('trade contributor_id null: tidak diblokir kontributor gagal', !blockedByIds(tradeNullContrib, new Set(['c1'])))
+}
+
+// ── urutan hapus kontributor offline-first (null-out dulu, baru hapus) ────────
+// UI enqueue: upsert trade (contributor_id=null) untuk tiap catatan terkait, lalu delete contributor.
+// Ini memastikan tidak ada FK violation saat antrean dikirim ke server.
+{
+  const baseWithAll = applyOps(emptyDB(), [
+    ups('contributors', row('c1', { name: 'Dio', sort_order: 0 })),
+    ups('trades', row('t1', { asset_id: 'a1', platform_id: 'p1', account_id: null, contributor_id: 'c1', side: 'buy', quantity: 1, price_per_unit: 1e9, fee: 0, traded_on: '2026-01-01' })),
+    ups('trades', row('t2', { asset_id: 'a1', platform_id: 'p1', account_id: null, contributor_id: 'c1', side: 'buy', quantity: 2, price_per_unit: 1e9, fee: 0, traded_on: '2026-02-01' })),
+  ])
+
+  const nullOp1: Op = ups('trades', { ...(baseWithAll.trades[0] as Row), contributor_id: null })
+  const nullOp2: Op = ups('trades', { ...(baseWithAll.trades[1] as Row), contributor_id: null })
+  const delOp: Op = del('contributors', 'c1')
+
+  const afterNullOut = applyOps(baseWithAll, [nullOp1, nullOp2, delOp])
+
+  ok('hapus kontributor: null-out dulu, contributor terhapus dari DB lokal', afterNullOut.contributors.length === 0)
+  ok('hapus kontributor: trade tetap ada setelah kontributor dihapus', afterNullOut.trades.length === 2)
+  ok('hapus kontributor: contributor_id t1 menjadi null', (afterNullOut.trades[0] as Record<string, unknown>).contributor_id === null)
+  ok('hapus kontributor: contributor_id t2 menjadi null', (afterNullOut.trades[1] as Record<string, unknown>).contributor_id === null)
+
+  // Null-out idempoten: jika diulangi, jumlah trade tidak bertambah
+  const repeat = applyOps(afterNullOut, [nullOp1, nullOp2])
+  ok('hapus kontributor: null-out idempoten (tidak duplikasi trade)', repeat.trades.length === 2)
 }
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
