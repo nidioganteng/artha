@@ -196,6 +196,21 @@ check('Login.tsx: narrow state via ResizeObserver',
 check('App.tsx: rute login-preview ada di blok SHELL_PREVIEW',
   app.includes('login-preview'))
 
+// ── Pemilih Periode ────────────────────────────────────────────────────────
+check('Dashboard.tsx: PeriodPicker diimpor', dash.includes("from '../ui/PeriodPicker'"))
+check('Dashboard.tsx: PeriodPicker dirender', dash.includes('<PeriodPicker'))
+check('Dashboard.tsx: periode disimpan ke localStorage', dash.includes('saveDashPeriod'))
+check('Dashboard.tsx: label "Sisa periode" (bukan "bulan ini")', dash.includes('Sisa periode'))
+check('Dashboard.tsx: "per hari ini" di portofolio investasi', dash.includes('per hari ini'))
+check('src/lib/period.ts: loadDashPeriod tersedia', (() => { try { const src = read('src/lib/period.ts'); return src.includes('loadDashPeriod') && src.includes('artha:dashPeriod'); } catch { return false; } })())
+check('src/ui/PeriodPicker.tsx: menggunakan createPortal', (() => { try { const src = read('src/ui/PeriodPicker.tsx'); return src.includes('createPortal') && src.includes('document.body'); } catch { return false; } })())
+check('src/ui/PeriodPicker.tsx: role="radiogroup" pada segmented control', (() => { try { const src = read('src/ui/PeriodPicker.tsx'); return src.includes('role="radiogroup"'); } catch { return false; } })())
+check('src/ui/PeriodPicker.tsx: minHeight 44 pada tombol bulan', (() => { try { const src = read('src/ui/PeriodPicker.tsx'); return src.includes('minHeight: 44') || src.includes("minHeight: '44px'"); } catch { return false; } })())
+check('src/ui/PeriodPicker.tsx: aria-live polite untuk ringkasan', (() => { try { const src = read('src/ui/PeriodPicker.tsx'); return src.includes('aria-live="polite"'); } catch { return false; } })())
+check('src/ui/PeriodPicker.tsx: Sheet digunakan untuk mobile', (() => { try { const src = read('src/ui/PeriodPicker.tsx'); return src.includes('<Sheet') && src.includes("from './Sheet'"); } catch { return false; } })())
+check('Dashboard.tsx: pemilih periode disembunyikan di mode investasi', /PeriodPicker[\s\S]{0,200}accountMode.*lengkap|accountMode.*lengkap[\s\S]{0,200}PeriodPicker/.test(dash))
+check('Dashboard.tsx: empty state periode', dash.includes('Belum ada catatan di periode ini'))
+
 // ── 2. BROWSER (Playwright) ───────────────────────────────────────────────────
 
 const PREVIEW_PORT = 4174
