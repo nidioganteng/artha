@@ -238,10 +238,20 @@ function allDemoIds(): Set<string> {
   return ids
 }
 
+// ─── Null safety ─────────────────────────────────────────────────────────────
+
+function must<T>(value: T | undefined | null, msg: string): T {
+  if (value == null) {
+    console.error(msg)
+    process.exit(1)
+  }
+  return value
+}
+
 // ─── Upsert batched ──────────────────────────────────────────────────────────
 
 async function upsertBatched(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any, any, any>>,
   table: string,
   rows: Record<string, unknown>[],
   batchSize = 200,
@@ -281,11 +291,11 @@ async function main() {
 
   // Login
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
-  if (authError || !authData.user) {
+  if (authError) {
     console.error('Login gagal. Periksa ARTHA_SEED_EMAIL dan ARTHA_SEED_PASSWORD.')
     process.exit(1)
   }
-  const userId = authData.user.id
+  const userId = must(authData.user, 'Login berhasil tetapi objek user kosong. Periksa konfigurasi Supabase.').id
 
   // ─── Baca data yang sudah ada dari Supabase ───────────────────────────────
 
@@ -305,43 +315,26 @@ async function main() {
   const categories: Category[] = (dbCategories ?? []) as Category[]
 
   // Cari account/category/platform/asset yang dibutuhkan
-  const accBRI = accounts.find((a) => a.name === 'BRI')
-  const accKas = accounts.find((a) => a.name === 'Kas')
-  const catGaji = categories.find((c) => c.name === 'Gaji' && c.kind === 'income')
-  const catProyek = categories.find((c) => c.name === 'Proyek / Freelance' && c.kind === 'income')
-  const catLainnyaIncome = categories.find((c) => c.name === 'Lainnya' && c.kind === 'income')
-  const catMakan = categories.find((c) => c.name === 'Makan' && c.kind === 'expense')
-  const catTransportasi = categories.find((c) => c.name === 'Transportasi' && c.kind === 'expense')
-  const catTagihan = categories.find((c) => c.name === 'Tagihan' && c.kind === 'expense')
-  const catKuliah = categories.find((c) => c.name === 'Kuliah' && c.kind === 'expense')
-  const catHiburan = categories.find((c) => c.name === 'Hiburan' && c.kind === 'expense')
-  const catLainnyaExpense = categories.find((c) => c.name === 'Lainnya' && c.kind === 'expense')
+  const MSG_SEED = 'Pastikan trigger seed_new_user sudah berjalan (lihat supabase/schema.sql).'
+  const accBRI = must(accounts.find((a) => a.name === 'BRI'), `Rekening 'BRI' tidak ditemukan. ${MSG_SEED}`)
+  const accKas = must(accounts.find((a) => a.name === 'Kas'), `Rekening 'Kas' tidak ditemukan. ${MSG_SEED}`)
+  const catGaji = must(categories.find((c) => c.name === 'Gaji' && c.kind === 'income'), `Kategori 'Gaji' tidak ditemukan. ${MSG_SEED}`)
+  const catProyek = must(categories.find((c) => c.name === 'Proyek / Freelance' && c.kind === 'income'), `Kategori 'Proyek / Freelance' tidak ditemukan. ${MSG_SEED}`)
+  const catLainnyaIncome = must(categories.find((c) => c.name === 'Lainnya' && c.kind === 'income'), `Kategori 'Lainnya (pemasukan)' tidak ditemukan. ${MSG_SEED}`)
+  const catMakan = must(categories.find((c) => c.name === 'Makan' && c.kind === 'expense'), `Kategori 'Makan' tidak ditemukan. ${MSG_SEED}`)
+  const catTransportasi = must(categories.find((c) => c.name === 'Transportasi' && c.kind === 'expense'), `Kategori 'Transportasi' tidak ditemukan. ${MSG_SEED}`)
+  const catTagihan = must(categories.find((c) => c.name === 'Tagihan' && c.kind === 'expense'), `Kategori 'Tagihan' tidak ditemukan. ${MSG_SEED}`)
+  const catKuliah = must(categories.find((c) => c.name === 'Kuliah' && c.kind === 'expense'), `Kategori 'Kuliah' tidak ditemukan. ${MSG_SEED}`)
+  const catHiburan = must(categories.find((c) => c.name === 'Hiburan' && c.kind === 'expense'), `Kategori 'Hiburan' tidak ditemukan. ${MSG_SEED}`)
+  const catLainnyaExpense = must(categories.find((c) => c.name === 'Lainnya' && c.kind === 'expense'), `Kategori 'Lainnya (pengeluaran)' tidak ditemukan. ${MSG_SEED}`)
 
   const platforms = dbPlatforms ?? []
-  const platFloq = (platforms as Array<{ id: string; name: string }>).find((p) => p.name === 'Floq')
-  const platBRI = (platforms as Array<{ id: string; name: string }>).find((p) => p.name === 'BRI')
+  const platFloq = must((platforms as Array<{ id: string; name: string }>).find((p) => p.name === 'Floq'), `Platform 'Floq' tidak ditemukan. ${MSG_SEED}`)
+  const platBRI = must((platforms as Array<{ id: string; name: string }>).find((p) => p.name === 'BRI'), `Platform 'BRI' tidak ditemukan. ${MSG_SEED}`)
 
   const assets: Asset[] = (dbAssets ?? []) as Asset[]
-  const assetBTC = assets.find((a) => a.symbol === 'BTC')
-  const assetEMAS = assets.find((a) => a.symbol === 'EMAS')
-
-  if (!accBRI || !accKas) {
-    console.error('Rekening BRI atau Kas tidak ditemukan. Pastikan trigger seed_new_user sudah berjalan.')
-    process.exit(1)
-  }
-  if (!catGaji || !catProyek || !catLainnyaIncome || !catMakan || !catTransportasi ||
-      !catTagihan || !catKuliah || !catHiburan || !catLainnyaExpense) {
-    console.error('Kategori tidak lengkap. Pastikan trigger seed_new_user sudah berjalan.')
-    process.exit(1)
-  }
-  if (!platFloq || !platBRI) {
-    console.error('Platform Floq atau BRI tidak ditemukan. Pastikan trigger seed_new_user sudah berjalan.')
-    process.exit(1)
-  }
-  if (!assetBTC || !assetEMAS) {
-    console.error('Aset BTC atau EMAS tidak ditemukan. Pastikan trigger seed_new_user sudah berjalan.')
-    process.exit(1)
-  }
+  const assetBTC = must(assets.find((a) => a.symbol === 'BTC'), `Aset 'BTC' tidak ditemukan. ${MSG_SEED}`)
+  const assetEMAS = must(assets.find((a) => a.symbol === 'EMAS'), `Aset 'EMAS' tidak ditemukan. ${MSG_SEED}`)
 
   // ─── Cek apakah ada data non-demo ────────────────────────────────────────
 
