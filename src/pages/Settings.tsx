@@ -216,7 +216,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
   }
   function closeBudgetEdit() { setEditingBudgetId(null); setEditBudgetVal(null) }
   function saveBudget(catId: string) {
-    const existing = db.budgets.find((b: Budget) => b.category_id === catId)
+    const existing = (db.budgets ?? []).find((b: Budget) => b.category_id === catId)
     if (editBudgetVal && editBudgetVal > 0) {
       if (existing) {
         save('budgets', { ...existing as unknown as Record<string, unknown>, amount: editBudgetVal })
@@ -489,7 +489,7 @@ export default function Settings({ onLogout, focusFailed }: { onLogout: () => vo
           <h2 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)', marginBottom: 8 }}>Kategori Transaksi</h2>
           {db.categories.length === 0 && <p className="muted" style={{ fontSize: 13, padding: '8px 0' }}>Belum ada kategori.</p>}
           {db.categories.map((c) => {
-            const budget = db.budgets.find((b: Budget) => b.category_id === c.id)
+            const budget = (db.budgets ?? []).find((b: Budget) => b.category_id === c.id)
             const isEditingBudget = editingBudgetId === c.id
             return (
               <div key={c.id} style={{ borderTop: '1px solid var(--border)' }}>

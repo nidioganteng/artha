@@ -130,7 +130,7 @@ export default function Report({ goto }: { goto?: (tab: string) => void }) {
 
   const budgetMap = useMemo(() => {
     const m = new Map<string, number>()
-    for (const b of db.budgets as Budget[]) m.set(b.category_id, b.amount)
+    for (const b of (db.budgets ?? []) as Budget[]) m.set(b.category_id, b.amount)
     return m
   }, [db.budgets])
 

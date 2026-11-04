@@ -93,7 +93,8 @@ export function StoreProvider({ userId, children }: { userId: string; children: 
   const queueKey = `kq:queue:${userId}`
   const failKey = `kq:failed:${userId}`
 
-  const serverRef = useRef<DB>(readJSON<DB>(cacheKey, emptyDB()))
+  // Merge cache lama dengan emptyDB() agar key baru (mis. budgets) selalu ada
+  const serverRef = useRef<DB>({ ...emptyDB(), ...readJSON<Partial<DB>>(cacheKey, {}) } as DB)
   const queueRef = useRef<Op[]>(readJSON<Op[]>(queueKey, []))
   // Migrasi data lama (Op[]) yang belum punya field error/blocked
   const failedRef = useRef<FailedOp[]>(
