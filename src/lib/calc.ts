@@ -558,3 +558,81 @@ export function contributorShares(
 
   return shares
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// periodRange & barChartMonths — filter periode dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PeriodKind = 'all' | 'month' | 'custom'
+
+export interface PeriodCustom {
+  from: string  // YYYY-MM
+  to: string    // YYYY-MM
+}
+
+export interface PeriodRange {
+  from: string  // YYYY-MM-DD
+  to: string    // YYYY-MM-DD
+}
+
+function lastDayISO(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  return `${monthKey}-${String(last).padStart(2, '0')}`
+}
+
+function addMonthStr(key: string, delta: number): string {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/**
+ * Hitung {from, to} rentang tanggal berdasarkan pilihan periode.
+ * Semua string dalam format YYYY-MM-DD. Tidak ada konversi UTC.
+ * Bila kind='all' dan firstDate null, from = awal bulan sekarang.
+ */
+export function periodRange(
+  kind: PeriodKind,
+  custom: PeriodCustom | null,
+  now: string,        // YYYY-MM-DD hari ini
+  firstDate: string | null,  // YYYY-MM-DD tanggal data paling awal, null = belum ada data
+): PeriodRange {
+  const nowMonth = now.slice(0, 7)
+
+  if (kind === 'month') {
+    return { from: `${nowMonth}-01`, to: lastDayISO(nowMonth) }
+  }
+
+  if (kind === 'custom' && custom) {
+    const a = custom.from <= custom.to ? custom.from : custom.to
+    const b = custom.from <= custom.to ? custom.to : custom.from
+    return { from: `${a}-01`, to: lastDayISO(b) }
+  }
+
+  // kind === 'all'
+  const from = firstDate ?? `${nowMonth}-01`
+  return { from, to: now }
+}
+
+export interface BarChartMonths {
+  months: string[]  // YYYY-MM, chronological
+  capped: boolean   // true jika periode > max, hanya max bulan terakhir yang dikembalikan
+}
+
+/**
+ * Daftar bulan YYYY-MM dalam rentang [from, to] (inklusif), maksimal `max` bulan terakhir.
+ * Bila periode lebih dari max, capped=true dan hanya max bulan terakhir yang dikembalikan.
+ */
+export function barChartMonths(from: string, to: string, max = 12): BarChartMonths {
+  const fromMonth = from.slice(0, 7)
+  const toMonth = to.slice(0, 7)
+  const all: string[] = []
+  let cur = fromMonth
+  for (let i = 0; i < 240 && cur <= toMonth; i++) {
+    all.push(cur)
+    cur = addMonthStr(cur, 1)
+  }
+  const capped = all.length > max
+  return { months: capped ? all.slice(-max) : all, capped }
+}

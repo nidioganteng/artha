@@ -1,6 +1,6 @@
 // Uji cepat kalkulasi investasi + fungsi murni format. Jalankan: npm run check:calc
 import { createHash } from 'node:crypto'
-import { computePosition, contributorShares, flowsOf, portfolioSeries, summarize, xirr } from '../src/lib/calc'
+import { computePosition, contributorShares, flowsOf, periodRange, barChartMonths, portfolioSeries, summarize, xirr } from '../src/lib/calc'
 import { formatPercent, parseNum, todayISO } from '../src/lib/format'
 import { formatMoneyInput, parseMoneyInput, formatQuantityInput, parseQuantityInput } from '../src/lib/numInput'
 import { formatShort } from '../src/lib/amount'
@@ -674,6 +674,89 @@ ok('formatPercent negatif besar aman', formatPercent(-1) === '-100,00%')
   ]
   const s22e = contributorShares(trades22e, contribs, 0)
   ok('22.13 portfolioValue = 0 → shareValue = 0', near(s22e[0].shareValue, 0))
+}
+
+// ── 23) periodRange — rentang tanggal filter periode ───────────────────────
+{
+  // 23.1 Semua tanpa data: from = awal bulan sekarang, to = now
+  const r231 = periodRange('all', null, '2026-10-15', null)
+  ok('23.1 periodRange all tanpa data: from = awal bulan', r231.from === '2026-10-01')
+  ok('23.2 periodRange all tanpa data: to = now', r231.to === '2026-10-15')
+
+  // 23.3 Semua dengan data: from = firstDate
+  const r233 = periodRange('all', null, '2026-10-15', '2025-11-01')
+  ok('23.3 periodRange all dengan data: from = firstDate', r233.from === '2025-11-01')
+  ok('23.4 periodRange all dengan data: to = now', r233.to === '2026-10-15')
+
+  // 23.5 Bulan ini November: 1-30
+  const r235 = periodRange('month', null, '2026-11-04', null)
+  ok('23.5 periodRange month: from = 2026-11-01', r235.from === '2026-11-01')
+  ok('23.6 periodRange month: to = 2026-11-30', r235.to === '2026-11-30')
+
+  // 23.7 Bulan ini Februari bukan kabisat
+  const r237 = periodRange('month', null, '2026-02-15', null)
+  ok('23.7 periodRange month Feb 2026: to = 2026-02-28', r237.to === '2026-02-28')
+
+  // 23.8 Bulan ini Februari kabisat
+  const r238 = periodRange('month', null, '2024-02-15', null)
+  ok('23.8 periodRange month Feb 2024 kabisat: to = 2024-02-29', r238.to === '2024-02-29')
+
+  // 23.9 Kustom inklusif akhir bulan
+  const r239 = periodRange('custom', { from: '2026-01', to: '2026-10' }, '2026-11-04', null)
+  ok('23.9 periodRange custom: from = 2026-01-01', r239.from === '2026-01-01')
+  ok('23.10 periodRange custom: to = 2026-10-31', r239.to === '2026-10-31')
+
+  // 23.11 Kustom awal = akhir: satu bulan
+  const r2311 = periodRange('custom', { from: '2026-05', to: '2026-05' }, '2026-11-04', null)
+  ok('23.11 periodRange custom from==to: from = 2026-05-01', r2311.from === '2026-05-01')
+  ok('23.12 periodRange custom from==to: to = 2026-05-31', r2311.to === '2026-05-31')
+
+  // 23.13 Kustom tukar otomatis bila akhir < awal
+  const r2313 = periodRange('custom', { from: '2026-10', to: '2026-03' }, '2026-11-04', null)
+  ok('23.13 periodRange custom swap: from = 2026-03-01', r2313.from === '2026-03-01')
+  ok('23.14 periodRange custom swap: to = 2026-10-31', r2313.to === '2026-10-31')
+}
+
+// ── 24) barChartMonths ─────────────────────────────────────────────────────
+{
+  // 24.1 3 bulan: Jan-Mar 2026, tidak capped
+  const b241 = barChartMonths('2026-01-01', '2026-03-31', 12)
+  ok('24.1 barChartMonths 3 bulan', b241.months.length === 3 && b241.months[0] === '2026-01' && b241.months[2] === '2026-03')
+  ok('24.2 barChartMonths tidak capped', !b241.capped)
+
+  // 24.3 15 bulan dengan max=12: capped, ambil 12 terakhir
+  const b243 = barChartMonths('2025-09-01', '2026-11-30', 12)
+  ok('24.3 barChartMonths capped=true', b243.capped)
+  ok('24.4 barChartMonths panjang = 12', b243.months.length === 12)
+  ok('24.5 barChartMonths 12 bulan terakhir', b243.months[b243.months.length - 1] === '2026-11')
+
+  // 24.6 Satu bulan: from = to
+  const b246 = barChartMonths('2026-05-01', '2026-05-31', 12)
+  ok('24.6 barChartMonths 1 bulan', b246.months.length === 1 && b246.months[0] === '2026-05')
+  ok('24.7 barChartMonths 1 bulan tidak capped', !b246.capped)
+}
+
+// ── 25) Verifikasi angka data demo Oktober 2026 ────────────────────────────
+{
+  // Income Oktober 2026 dari seed-demo.ts (deterministik):
+  const oct26Income = 8_000_000 + 2_200_000 // gaji + proyek = 10_200_000
+  ok('25.1 income demo Okt 2026 = Rp 10.200.000', oct26Income === 10_200_000)
+
+  // InvestBuy Oktober 2026: BTC oct26a + oct26b (dari seed-demo.ts)
+  const oct26aBuy = 0.0004 * 2_480_000_000 + 9_920   // 992_000 + 9_920 = 1_001_920
+  const oct26bBuy = 0.0002 * 2_480_000_000 + 4_960   // 496_000 + 4_960 = 500_960
+  const oct26InvestBuy = oct26aBuy + oct26bBuy        // = 1_502_880
+  ok('25.2 investBuy demo Okt 2026 = Rp 1.502.880', near(oct26InvestBuy, 1_502_880))
+
+  // Sisa = income - expense - investBuy (expense dari spec = 3_440_000)
+  const oct26Expense = 3_440_000
+  const oct26Sisa = oct26Income - oct26Expense - oct26InvestBuy
+  ok('25.3 sisa demo Okt 2026 = Rp 5.257.120', near(oct26Sisa, 5_257_120))
+
+  // Verifikasi periodRange untuk Okt 2026 Kustom
+  const oct26Range = periodRange('custom', { from: '2026-10', to: '2026-10' }, '2026-11-04', '2025-11-01')
+  ok('25.4 periodRange Okt 2026: from = 2026-10-01', oct26Range.from === '2026-10-01')
+  ok('25.5 periodRange Okt 2026: to = 2026-10-31', oct26Range.to === '2026-10-31')
 }
 
 console.log(failed === 0 ? '\nSemua uji lolos.' : `\n${failed} uji gagal.`)
